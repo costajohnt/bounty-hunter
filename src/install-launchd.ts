@@ -1,11 +1,23 @@
 import { writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { loadConfig, getDataDir } from "./config.js";
 
 const PLIST_NAME = "com.bounty-hunter.monitor";
-const PLIST_DIR = join(process.env.HOME ?? "~", "Library", "LaunchAgents");
-const PLIST_PATH = join(PLIST_DIR, `${PLIST_NAME}.plist`);
+
+function getPlistDir(): string {
+  return join(homedir(), "Library", "LaunchAgents");
+}
+
+function getPlistPath(): string {
+  return join(getPlistDir(), `${PLIST_NAME}.plist`);
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 export function generatePlist(monitorScriptPath: string, intervalSeconds: number): string {
   const logPath = join(getDataDir(), "monitor.log");
@@ -19,14 +31,14 @@ export function generatePlist(monitorScriptPath: string, intervalSeconds: number
     <key>ProgramArguments</key>
     <array>
         <string>node</string>
-        <string>${monitorScriptPath}</string>
+        <string>${escapeXml(monitorScriptPath)}</string>
     </array>
     <key>StartInterval</key>
     <integer>${intervalSeconds}</integer>
     <key>StandardOutPath</key>
-    <string>${logPath}</string>
+    <string>${escapeXml(logPath)}</string>
     <key>StandardErrorPath</key>
-    <string>${logPath}</string>
+    <string>${escapeXml(logPath)}</string>
     <key>RunAtLoad</key>
     <true/>
     <key>EnvironmentVariables</key>
@@ -41,16 +53,18 @@ export function generatePlist(monitorScriptPath: string, intervalSeconds: number
 export function installLaunchd(monitorScriptPath: string): void {
   const config = loadConfig();
   const interval = (config.polling_interval ?? 5) * 60;
+  const plistDir = getPlistDir();
+  const plistPath = getPlistPath();
 
-  mkdirSync(PLIST_DIR, { recursive: true });
+  mkdirSync(plistDir, { recursive: true });
   const plist = generatePlist(monitorScriptPath, interval);
-  writeFileSync(PLIST_PATH, plist);
+  writeFileSync(plistPath, plist);
 
   // Unload if already loaded, then load
   try {
-    execFileSync("launchctl", ["unload", PLIST_PATH], { stdio: "ignore" });
+    execFileSync("launchctl", ["unload", plistPath], { stdio: "ignore" });
   } catch {}
-  execFileSync("launchctl", ["load", PLIST_PATH]);
+  execFileSync("launchctl", ["load", plistPath]);
 
   console.log(`Installed and loaded ${PLIST_NAME}`);
   console.log(`Polling every ${config.polling_interval} minutes`);
@@ -58,17 +72,18 @@ export function installLaunchd(monitorScriptPath: string): void {
 }
 
 export function uninstallLaunchd(): void {
+  const plistPath = getPlistPath();
   try {
-    execFileSync("launchctl", ["unload", PLIST_PATH], { stdio: "ignore" });
+    execFileSync("launchctl", ["unload", plistPath], { stdio: "ignore" });
   } catch {}
-  if (existsSync(PLIST_PATH)) {
-    unlinkSync(PLIST_PATH);
+  if (existsSync(plistPath)) {
+    unlinkSync(plistPath);
   }
   console.log(`Uninstalled ${PLIST_NAME}`);
 }
 
 // Entry point
-const isMain = import.meta.url === `file://${process.argv[1]}`;
+const isMain = fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isMain) {
   const action = process.argv[2];
   if (action === "install") {

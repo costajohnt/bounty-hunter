@@ -1,10 +1,9 @@
-import type { BountyIssue } from "./types.js";
+import type { AlgoraSource, BountyIssue } from "./types.js";
 
 const ALGORA_BASE = "https://algora.io/api/trpc/bounty.list";
 
 interface AlgoraQueryParams {
   limit?: number;
-  org?: string;
 }
 
 interface AlgoraFilterParams {
@@ -48,7 +47,8 @@ export function buildAlgoraUrl(params: AlgoraQueryParams): string {
       json: {
         status: "open",
         limit: params.limit ?? 50,
-        ...(params.org ? { org: params.org } : {}),
+
+
       },
     },
   };
@@ -91,6 +91,14 @@ export function parseAlgoraResponse(
       created_at: item.created_at,
       tech: item.tech,
     }));
+}
+
+export function buildAlgoraFilters(algora: AlgoraSource): AlgoraFilterParams {
+  return {
+    min_bounty: algora.min_bounty,
+    languages: algora.languages.length ? algora.languages : undefined,
+    keywords_exclude: algora.keywords_exclude,
+  };
 }
 
 export async function fetchAlgoraBounties(

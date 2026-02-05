@@ -17,7 +17,7 @@ const makeIssue = (overrides: Partial<BountyIssue> = {}): BountyIssue => ({
 
 describe("applyPreFilter", () => {
   it("passes issues with no exclude keywords", () => {
-    const result = applyPreFilter(makeIssue(), {});
+    const result = applyPreFilter(makeIssue(), undefined);
     expect(result).toBe(true);
   });
 

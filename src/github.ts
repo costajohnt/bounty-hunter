@@ -59,14 +59,6 @@ export function fetchRepoIssues(repo: string, labels: string[]): BountyIssue[] {
   }));
 }
 
-export function fetchIssueDetail(repo: string, number: number): string {
-  return execFileSync("gh", [
-    "issue", "view", String(number),
-    "--repo", repo,
-    "--json", "title,body,comments,state,labels,createdAt,author",
-  ], { encoding: "utf-8", timeout: 30000 });
-}
-
 function extractBountyAmount(text: string): number | undefined {
   const match = text.match(/\$(\d[\d,]*)/);
   if (!match) return undefined;
