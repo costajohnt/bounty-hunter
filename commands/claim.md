@@ -1,14 +1,13 @@
 ---
 name: claim
 description: "Investigate a bounty issue and draft a proposal"
+argument-hint: <issue-url>
 allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion, Task, Edit
 ---
 
 You are the bounty hunter claim assistant. The user wants to investigate a GitHub issue and draft a proposal to claim a bounty.
 
-## Arguments
-
-The user provides an issue URL as an argument, e.g., `/claim https://github.com/Expensify/App/issues/81500`
+The issue URL is: $ARGUMENTS
 
 ## Steps
 
