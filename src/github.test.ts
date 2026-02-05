@@ -25,4 +25,14 @@ describe("buildSearchArgs", () => {
     expect(args).toContain("Expensify/App");
     expect(args).toContain("Help Wanted");
   });
+
+  it("includes all labels when multiple are provided", () => {
+    const args = buildSearchArgs("Expensify/App", ["Help Wanted", "External", "Bug"]);
+    expect(args).toContain("Help Wanted");
+    expect(args).toContain("External");
+    expect(args).toContain("Bug");
+    // Each label should be preceded by --label
+    const labelFlags = args.reduce((count, arg) => arg === "--label" ? count + 1 : count, 0);
+    expect(labelFlags).toBe(3);
+  });
 });
