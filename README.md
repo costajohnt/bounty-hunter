@@ -4,6 +4,7 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that moni
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 - [Why Bounty Hunter?](#why-bounty-hunter)
 - [How It Works](#how-it-works)
 - [Prerequisites](#prerequisites)
@@ -17,6 +18,80 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that moni
 - [Architecture](#architecture)
 - [Development](#development)
 - [License](#license)
+
+## Quick Start
+
+From zero to Telegram pings in 5 steps.
+
+**1. Clone and build**
+
+```bash
+git clone https://github.com/costajohnt/bounty-hunter.git
+cd bounty-hunter
+npm install
+npm run build
+```
+
+**2. Create a Telegram bot**
+
+Open Telegram, search for [@BotFather](https://t.me/BotFather), and send `/newbot`. Pick a name and username. BotFather replies with a **bot token** — copy it.
+
+**3. Get your chat ID**
+
+Send any message to your new bot in Telegram, then run:
+
+```bash
+curl -s "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates" | jq '.result[0].message.chat.id'
+```
+
+**4. Write the config**
+
+```bash
+mkdir -p ~/.bounty-hunter
+cat > ~/.bounty-hunter/watchlist.yml << 'EOF'
+polling_interval: 5
+
+telegram:
+  bot_token: "YOUR_BOT_TOKEN"
+  chat_id: "YOUR_CHAT_ID"
+
+sources:
+  repos:
+    - name: Expensify/App
+      labels: ["Help Wanted"]
+      proposal_template: expensify
+
+  algora:
+    enabled: true
+    min_bounty: 50
+    languages: []
+    keywords_exclude: []
+EOF
+```
+
+Edit the file to add your bot token, chat ID, and the repos you want to watch. See [Configuration](#configuration) for all available options.
+
+**5. Start the background monitor**
+
+```bash
+# Test it once to make sure it works
+node dist/monitor.js
+
+# Install the launchd agent to run every 5 minutes
+node dist/install-launchd.js install
+```
+
+You'll get a Telegram message whenever a new bounty appears. To claim one, open Claude Code with the plugin loaded and use `/claim`:
+
+```bash
+claude --plugin-dir /path/to/bounty-hunter
+```
+
+```
+/claim https://github.com/Expensify/App/issues/81500
+```
+
+---
 
 ## Why Bounty Hunter?
 
