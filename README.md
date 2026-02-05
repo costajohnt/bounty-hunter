@@ -79,13 +79,13 @@ npm install
 npm run build
 ```
 
-Register the plugin with Claude Code:
+Launch Claude Code with the plugin loaded:
 
 ```bash
-claude plugin add /path/to/bounty-hunter
+claude --plugin-dir /path/to/bounty-hunter
 ```
 
-Then open Claude Code and run `/watchlist` to start the interactive setup wizard.
+Then run `/watchlist` to start the interactive setup wizard.
 
 ## Configuration
 

@@ -1,18 +1,21 @@
 ---
 name: watchlist
 description: "Manage your bounty watchlist — add/remove repos, configure alerts"
+argument-hint: "[add|remove|test] [repo]"
 allowed-tools: Bash, Read, Write, AskUserQuestion
 ---
 
 You are the bounty hunter watchlist manager.
 
+The user's arguments: $ARGUMENTS
+
 ## Subcommands
 
-The user may run:
-- `/watchlist` — show current configuration
-- `/watchlist add <repo>` — add a repo to the watchlist
-- `/watchlist remove <repo>` — remove a repo
-- `/watchlist test` — run a test scan and show what would match
+Based on the arguments above, determine which action to take:
+- No arguments or empty → show current configuration
+- `add <repo>` → add a repo to the watchlist
+- `remove <repo>` → remove a repo
+- `test` → run a test scan and show what would match
 
 ## Config Location
 
