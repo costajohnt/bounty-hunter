@@ -1,0 +1,85 @@
+import { describe, it, expect } from "vitest";
+import { buildAlgoraUrl, parseAlgoraResponse } from "./algora.js";
+
+describe("buildAlgoraUrl", () => {
+  it("builds URL with default params", () => {
+    const url = buildAlgoraUrl({});
+    expect(url).toContain("algora.io/api/trpc/bounty.list");
+    expect(url).toContain("status");
+    expect(url).toContain("open");
+  });
+
+  it("builds URL with limit", () => {
+    const url = buildAlgoraUrl({ limit: 10 });
+    expect(url).toContain("10");
+  });
+});
+
+describe("parseAlgoraResponse", () => {
+  it("parses a valid Algora response into BountyIssues", () => {
+    const raw = [{
+      result: {
+        data: {
+          json: {
+            items: [{
+              id: "abc123",
+              status: "open",
+              reward: { currency: "USD", amount: 25000 },
+              reward_formatted: "$250",
+              tech: ["typescript"],
+              created_at: "2026-02-05T00:00:00Z",
+              task: {
+                number: 100,
+                title: "Fix bug",
+                url: "https://github.com/test/repo/issues/100",
+                body: "Description here",
+                repo_name: "repo",
+                repo_owner: "test",
+              },
+              org: { handle: "test", name: "Test Org" },
+            }],
+            next_cursor: null,
+          },
+        },
+      },
+    }];
+    const issues = parseAlgoraResponse(raw);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].bounty_amount).toBe(250);
+    expect(issues[0].repo).toBe("test/repo");
+    expect(issues[0].source).toBe("algora");
+  });
+
+  it("filters by minimum bounty", () => {
+    const raw = [{
+      result: {
+        data: {
+          json: {
+            items: [
+              {
+                id: "a", status: "open",
+                reward: { currency: "USD", amount: 5000 },
+                reward_formatted: "$50",
+                tech: [], created_at: "2026-02-05T00:00:00Z",
+                task: { number: 1, title: "Small", url: "https://github.com/t/r/issues/1", body: "", repo_name: "r", repo_owner: "t" },
+                org: { handle: "t", name: "T" },
+              },
+              {
+                id: "b", status: "open",
+                reward: { currency: "USD", amount: 100000 },
+                reward_formatted: "$1,000",
+                tech: [], created_at: "2026-02-05T00:00:00Z",
+                task: { number: 2, title: "Big", url: "https://github.com/t/r/issues/2", body: "", repo_name: "r", repo_owner: "t" },
+                org: { handle: "t", name: "T" },
+              },
+            ],
+            next_cursor: null,
+          },
+        },
+      },
+    }];
+    const issues = parseAlgoraResponse(raw, { min_bounty: 100 });
+    expect(issues).toHaveLength(1);
+    expect(issues[0].title).toBe("Big");
+  });
+});

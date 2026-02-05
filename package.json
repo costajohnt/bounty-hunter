@@ -1,0 +1,24 @@
+{
+  "name": "bounty-hunter",
+  "version": "0.1.0",
+  "description": "Bounty issue monitor and claim assistant",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "bounty-hunter": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "monitor": "node dist/monitor.js"
+  },
+  "dependencies": {
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

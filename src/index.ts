@@ -1,0 +1,115 @@
+#!/usr/bin/env node
+
+import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
+import { fetchRepoIssues } from "./github.js";
+import { fetchAlgoraBounties } from "./algora.js";
+import { SeenStore } from "./seen.js";
+import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
+import { applyPreFilter } from "./monitor.js";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+
+const args = process.argv.slice(2);
+const command = args[0];
+const flags = args.includes("--json");
+
+async function main() {
+  switch (command) {
+    case "scan": {
+      const config = loadConfig();
+      const dataDir = getDataDir();
+      const seen = new SeenStore(join(dataDir, "seen.json"));
+      const allIssues = [];
+
+      for (const repo of config.sources.repos) {
+        const issues = fetchRepoIssues(repo.name, repo.labels);
+        for (const issue of issues) {
+          if (!applyPreFilter(issue, repo.pre_filter ?? {})) continue;
+          allIssues.push({ ...issue, is_new: !seen.hasSeen(issue.repo, issue.number) });
+        }
+      }
+
+      if (config.sources.algora?.enabled) {
+        const bounties = await fetchAlgoraBounties({
+          min_bounty: config.sources.algora.min_bounty,
+          languages: config.sources.algora.languages.length ? config.sources.algora.languages : undefined,
+        });
+        for (const issue of bounties) {
+          allIssues.push({ ...issue, is_new: !seen.hasSeen(issue.repo, issue.number) });
+        }
+      }
+
+      if (flags) {
+        console.log(JSON.stringify(allIssues, null, 2));
+      } else {
+        for (const issue of allIssues) {
+          const marker = issue.is_new ? "NEW" : "   ";
+          const bounty = issue.bounty_formatted ?? "    ";
+          console.log(`[${marker}] ${bounty.padEnd(8)} ${issue.repo}#${issue.number} — ${issue.title}`);
+        }
+      }
+      break;
+    }
+
+    case "notify": {
+      const config = loadConfig();
+      const issueJson = args[1];
+      if (!issueJson) { console.error("Usage: bounty-hunter notify <issue-json>"); process.exit(1); }
+      const issue = JSON.parse(issueJson);
+      await sendTelegramMessage(config.telegram, formatBountyNotification(issue));
+      break;
+    }
+
+    case "post-comment": {
+      const repoIdx = args.indexOf("--repo");
+      const issueIdx = args.indexOf("--issue");
+      const bodyIdx = args.indexOf("--body");
+      if (repoIdx === -1 || issueIdx === -1 || bodyIdx === -1) {
+        console.error("Usage: bounty-hunter post-comment --repo <repo> --issue <num> --body <file>");
+        process.exit(1);
+      }
+      const repo = args[repoIdx + 1];
+      const issueNum = args[issueIdx + 1];
+      const bodyFile = args[bodyIdx + 1];
+      execFileSync("gh", ["issue", "comment", issueNum, "--repo", repo, "--body-file", bodyFile], { stdio: "inherit" });
+      break;
+    }
+
+    case "seen": {
+      const dataDir = getDataDir();
+      const seen = new SeenStore(join(dataDir, "seen.json"));
+      if (args[1] === "--add") {
+        const idArg = args[2] ?? "";
+        const hashIdx = idArg.lastIndexOf("#");
+        if (hashIdx === -1) { console.error("Usage: bounty-hunter seen --add <repo>#<number>"); process.exit(1); }
+        const repo = idArg.slice(0, hashIdx);
+        const num = idArg.slice(hashIdx + 1);
+        seen.markSeen({
+          id: idArg,
+          repo,
+          number: parseInt(num, 10),
+          title: "",
+          seen_at: new Date().toISOString(),
+          skipped: false,
+        });
+        console.log(`Marked ${idArg} as seen`);
+      }
+      break;
+    }
+
+    case "config": {
+      const config = loadConfig();
+      console.log(JSON.stringify(config, null, 2));
+      break;
+    }
+
+    default:
+      console.log("Usage: bounty-hunter <scan|notify|post-comment|seen|config> [--json]");
+  }
+}
+
+main().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});
