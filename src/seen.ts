@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import type { SeenIssue } from "./types.js";
+import type { BountyIssue, SeenIssue } from "./types.js";
 
 export class SeenStore {
   private path: string;
@@ -32,8 +32,20 @@ export class SeenStore {
   }
 
   markSeen(issue: SeenIssue): void {
-    this.data.set(issue.id, issue);
+    const id = this.makeId(issue.repo, issue.number);
+    this.data.set(id, { ...issue, id });
     this.save();
+  }
+
+  markSeenFromBounty(issue: BountyIssue): void {
+    this.markSeen({
+      id: this.makeId(issue.repo, issue.number),
+      repo: issue.repo,
+      number: issue.number,
+      title: issue.title,
+      seen_at: new Date().toISOString(),
+      skipped: false,
+    });
   }
 
   markSkipped(repo: string, number: number): void {

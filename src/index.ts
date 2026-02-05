@@ -2,12 +2,11 @@
 
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
 import { fetchRepoIssues } from "./github.js";
-import { fetchAlgoraBounties } from "./algora.js";
+import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { SeenStore } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { applyPreFilter } from "./monitor.js";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const args = process.argv.slice(2);
@@ -19,22 +18,20 @@ async function main() {
     case "scan": {
       const config = loadConfig();
       const dataDir = getDataDir();
+      ensureDataDir(dataDir);
       const seen = new SeenStore(join(dataDir, "seen.json"));
       const allIssues = [];
 
       for (const repo of config.sources.repos) {
         const issues = fetchRepoIssues(repo.name, repo.labels);
         for (const issue of issues) {
-          if (!applyPreFilter(issue, repo.pre_filter ?? {})) continue;
+          if (!applyPreFilter(issue, repo.pre_filter)) continue;
           allIssues.push({ ...issue, is_new: !seen.hasSeen(issue.repo, issue.number) });
         }
       }
 
       if (config.sources.algora?.enabled) {
-        const bounties = await fetchAlgoraBounties({
-          min_bounty: config.sources.algora.min_bounty,
-          languages: config.sources.algora.languages.length ? config.sources.algora.languages : undefined,
-        });
+        const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
         for (const issue of bounties) {
           allIssues.push({ ...issue, is_new: !seen.hasSeen(issue.repo, issue.number) });
         }
@@ -56,7 +53,13 @@ async function main() {
       const config = loadConfig();
       const issueJson = args[1];
       if (!issueJson) { console.error("Usage: bounty-hunter notify <issue-json>"); process.exit(1); }
-      const issue = JSON.parse(issueJson);
+      let issue;
+      try {
+        issue = JSON.parse(issueJson);
+      } catch {
+        console.error("Invalid JSON. Usage: bounty-hunter notify '<json>'");
+        process.exit(1);
+      }
       await sendTelegramMessage(config.telegram, formatBountyNotification(issue));
       break;
     }
@@ -72,12 +75,17 @@ async function main() {
       const repo = args[repoIdx + 1];
       const issueNum = args[issueIdx + 1];
       const bodyFile = args[bodyIdx + 1];
+      if (!repo || !issueNum || !bodyFile || repo.startsWith("--") || issueNum.startsWith("--") || bodyFile.startsWith("--")) {
+        console.error("Usage: bounty-hunter post-comment --repo <repo> --issue <num> --body <file>");
+        process.exit(1);
+      }
       execFileSync("gh", ["issue", "comment", issueNum, "--repo", repo, "--body-file", bodyFile], { stdio: "inherit" });
       break;
     }
 
     case "seen": {
       const dataDir = getDataDir();
+      ensureDataDir(dataDir);
       const seen = new SeenStore(join(dataDir, "seen.json"));
       if (args[1] === "--add") {
         const idArg = args[2] ?? "";
