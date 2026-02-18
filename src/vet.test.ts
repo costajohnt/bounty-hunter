@@ -162,10 +162,25 @@ describe("checkAccessRequirements", () => {
     expect(result.found!.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("passes when no keywords configured", () => {
+  it("passes when no keywords configured and no internal URLs", () => {
     const issue = makeIssue({ body: "Needs staging server" });
     const result = checkAccessRequirements(issue, [], []);
+    // "staging server" is not a configured keyword, and no internal URL patterns present
     expect(result.passed).toBe(true);
+  });
+
+  it("still detects internal URL patterns even with empty keywords", () => {
+    const issue = makeIssue({ body: "See dashboard.internal.company.com" });
+    const result = checkAccessRequirements(issue, [], []);
+    expect(result.passed).toBe(false);
+    expect(result.found).toContain("internal URL pattern");
+  });
+
+  it("still detects *.corp.* URLs even with empty keywords", () => {
+    const issue = makeIssue({ body: "Visit tools.corp.example.com" });
+    const result = checkAccessRequirements(issue, [], []);
+    expect(result.passed).toBe(false);
+    expect(result.found).toContain("internal URL pattern");
   });
 });
 
@@ -289,6 +304,18 @@ describe("countProposals", () => {
     expect(result.count).toBe(1);
     expect(result.hasApproved).toBe(true);
   });
+
+  it("counts zero proposals but still detects approvals when patterns is empty", () => {
+    const comments = [
+      makeComment({
+        authorAssociation: "MEMBER",
+        body: "You're hired!",
+      }),
+    ];
+    const result = countProposals(comments, []);
+    expect(result.count).toBe(0);
+    expect(result.hasApproved).toBe(true);
+  });
 });
 
 // --- Competition ---
@@ -325,6 +352,12 @@ describe("checkCompetition", () => {
   it("passes with zero proposals", () => {
     const result = checkCompetition({ count: 0, hasApproved: false }, 3);
     expect(result.passed).toBe(true);
+  });
+
+  it("passes when disabled even if a proposal is approved", () => {
+    const result = checkCompetition({ count: 1, hasApproved: true }, 0);
+    expect(result.passed).toBe(true);
+    expect(result.detail).toContain("disabled");
   });
 });
 

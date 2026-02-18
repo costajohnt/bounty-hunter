@@ -74,6 +74,7 @@ describe("formatBountyNotification", () => {
     const msg = formatBountyNotification(makeIssue(), vetResult);
     expect(msg).toContain("\u26a0\ufe0f"); // ⚠️
     expect(msg).toContain("Failed: access_requirements, competition");
+    expect(msg).not.toContain("Vetted: Failed:"); // no redundant prefix
     expect(msg).toContain("Proposals: 4");
   });
 

@@ -65,6 +65,10 @@ export function shouldNotify(
       return true;
     case "notify_all":
       return true;
+    default: {
+      const _exhaustive: never = onFail;
+      return _exhaustive;
+    }
   }
 }
 

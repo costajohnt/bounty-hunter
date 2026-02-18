@@ -9,7 +9,12 @@ import { applyPreFilter, applyFreshnessFilter } from "./monitor.js";
 import { vetIssue } from "./vet.js";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import type { VetResult } from "./types.js";
+import type { BountyIssue, VetResult } from "./types.js";
+
+interface ScanResult extends BountyIssue {
+  is_new: boolean;
+  vetResult?: VetResult;
+}
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -23,10 +28,16 @@ async function main() {
       ensureDataDir(dataDir);
       const seen = new SeenStore(join(dataDir, "seen.json"));
       const vettingEnabled = config.vetting.enabled;
-      const allIssues: Array<Record<string, unknown>> = [];
+      const allIssues: ScanResult[] = [];
 
       for (const repo of config.sources.repos) {
-        const issues = fetchRepoIssues(repo.name, repo.labels);
+        let issues: BountyIssue[];
+        try {
+          issues = fetchRepoIssues(repo.name, repo.labels);
+        } catch (err) {
+          console.error(`Error fetching ${repo.name}:`, err instanceof Error ? err.message : err);
+          continue;
+        }
         for (const issue of issues) {
           if (!applyPreFilter(issue, repo.pre_filter)) continue;
           if (!applyFreshnessFilter(issue, config.filters)) continue;
@@ -75,9 +86,9 @@ async function main() {
       } else {
         for (const issue of allIssues) {
           const marker = issue.is_new ? "NEW" : "   ";
-          const bounty = (issue.bounty_formatted as string) ?? "    ";
+          const bounty = issue.bounty_formatted ?? "    ";
           const vet = issue.vetResult
-            ? (issue.vetResult as VetResult).passed
+            ? issue.vetResult.passed
               ? " \u2705"
               : " \u26a0\ufe0f"
             : "";

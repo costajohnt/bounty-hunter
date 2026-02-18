@@ -39,27 +39,18 @@ export function checkAccessRequirements(
   comments: IssueComment[],
   keywords: string[]
 ): VetSignal {
-  if (keywords.length === 0) {
-    return { name: "access_requirements", passed: true, detail: "No access keywords configured" };
-  }
-
-  const allText = [
-    issue.body,
-    ...comments.map((c) => c.body),
-  ]
-    .join("\n")
-    .toLowerCase();
-
+  const fullText = [issue.body, ...comments.map((c) => c.body)].join("\n");
+  const allText = fullText.toLowerCase();
   const found: string[] = [];
 
+  // Check configurable keywords
   for (const kw of keywords) {
     if (allText.includes(kw.toLowerCase())) {
       found.push(kw);
     }
   }
 
-  // Also check for internal URL patterns
-  const fullText = [issue.body, ...comments.map((c) => c.body)].join("\n");
+  // Always check hardcoded internal URL patterns regardless of keyword config
   if (INTERNAL_URL_RE.test(fullText)) {
     found.push("internal URL pattern");
   }

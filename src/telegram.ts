@@ -29,7 +29,7 @@ export function formatBountyNotification(
       vetLine = `\nVetted: OK`;
     } else {
       prefix = "\u26a0\ufe0f"; // ⚠️
-      vetLine = `\nVetted: ${vetResult.summary}`;
+      vetLine = `\n${vetResult.summary}`;
     }
   } else {
     prefix = "\ud83c\udfaf"; // 🎯
