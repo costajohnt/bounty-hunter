@@ -10,6 +10,18 @@ telegram:
   bot_token: "set-via-env"
   chat_id: "set-via-env"
 
+# Freshness & claimed-bounty filters (all optional — defaults shown)
+filters:
+  max_age_days: 7              # Ignore issues older than N days (0 = disabled)
+  skip_assigned: true          # Skip GitHub issues with assignees
+  claimed_labels:              # Skip GitHub issues with these labels (case-insensitive)
+    - Reviewing
+    - Approved
+    - Assigned
+    - Under Review
+    - In Progress
+  max_comment_count: 5         # Skip GitHub issues with >= N comments (0 = disabled)
+
 sources:
   repos:
     - name: Expensify/App

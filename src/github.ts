@@ -23,7 +23,7 @@ export function buildSearchArgs(repo: string, labels: string[]): string[] {
     "--sort", "created",
     "--order", "desc",
     "--limit", "20",
-    "--json", "number,title,url,createdAt,labels,body,commentsCount",
+    "--json", "number,title,url,createdAt,labels,body,commentsCount,assignees",
   ];
   for (const label of labels) {
     args.push("--label", label);
@@ -40,6 +40,7 @@ export function fetchRepoIssues(repo: string, labels: string[]): BountyIssue[] {
     url: string;
     createdAt: string;
     labels: Array<{ name: string }>;
+    assignees: Array<{ login: string }>;
     body: string;
     commentsCount: number;
   }>;
@@ -51,6 +52,7 @@ export function fetchRepoIssues(repo: string, labels: string[]): BountyIssue[] {
     title: issue.title,
     url: issue.url,
     labels: issue.labels.map((l) => l.name),
+    assignees: issue.assignees.map((a) => a.login),
     body: issue.body,
     comment_count: issue.commentsCount,
     created_at: issue.createdAt,

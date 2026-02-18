@@ -26,6 +26,13 @@ describe("buildSearchArgs", () => {
     expect(args).toContain("Help Wanted");
   });
 
+  it("includes assignees in the JSON fields", () => {
+    const args = buildSearchArgs("Expensify/App", ["Help Wanted"]);
+    const jsonIdx = args.indexOf("--json");
+    const jsonFields = args[jsonIdx + 1];
+    expect(jsonFields).toContain("assignees");
+  });
+
   it("includes all labels when multiple are provided", () => {
     const args = buildSearchArgs("Expensify/App", ["Help Wanted", "External", "Bug"]);
     expect(args).toContain("Help Wanted");

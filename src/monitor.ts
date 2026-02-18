@@ -5,12 +5,39 @@ import { fetchRepoIssues } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { SeenStore } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
-import type { BountyIssue, RepoSource } from "./types.js";
+import type { BountyIssue, Filters, RepoSource } from "./types.js";
 
 export function applyPreFilter(issue: BountyIssue, filter: RepoSource["pre_filter"]): boolean {
   if (!filter?.keywords_exclude?.length) return true;
   const text = (issue.title + " " + issue.body).toLowerCase();
   return !filter.keywords_exclude.some((kw) => text.includes(kw.toLowerCase()));
+}
+
+export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): boolean {
+  // Age check (both sources)
+  if (filters.max_age_days > 0) {
+    const ageMs = Date.now() - new Date(issue.created_at).getTime();
+    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+    if (ageDays > filters.max_age_days) return false;
+  }
+
+  // GitHub-specific checks — Algora handles claiming at the API level and
+  // hardcodes assignees/labels/comment_count to empty/zero, so these only
+  // provide useful signal for GitHub issues.
+  if (issue.source === "github") {
+    if (filters.skip_assigned && issue.assignees.length > 0) return false;
+
+    if (filters.claimed_labels.length > 0) {
+      const claimedLower = filters.claimed_labels.map((l) => l.toLowerCase());
+      if (issue.labels.some((l) => claimedLower.includes(l.toLowerCase()))) return false;
+    }
+
+    if (filters.max_comment_count > 0 && issue.comment_count >= filters.max_comment_count) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export async function runMonitor(): Promise<void> {
@@ -28,6 +55,7 @@ export async function runMonitor(): Promise<void> {
       for (const issue of issues) {
         if (seen.hasSeen(issue.repo, issue.number)) continue;
         if (!applyPreFilter(issue, repo.pre_filter)) continue;
+        if (!applyFreshnessFilter(issue, config.filters)) continue;
         allNew.push(issue);
         seen.markSeenFromBounty(issue);
       }
@@ -42,6 +70,7 @@ export async function runMonitor(): Promise<void> {
       const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
       for (const issue of bounties) {
         if (seen.hasSeen(issue.repo, issue.number)) continue;
+        if (!applyFreshnessFilter(issue, config.filters)) continue;
         allNew.push(issue);
         seen.markSeenFromBounty(issue);
       }
