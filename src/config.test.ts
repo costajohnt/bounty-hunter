@@ -43,6 +43,43 @@ sources:
   it("throws on missing file", () => {
     expect(() => loadConfig(join(TEST_DIR, "nope.yml"))).toThrow();
   });
+
+  it("throws on invalid config shape", () => {
+    const yml = `
+polling_interval: "not-a-number"
+telegram:
+  bot_token: 123
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    expect(() => loadConfig(join(TEST_DIR, "watchlist.yml"))).toThrow();
+  });
+
+  it("overrides telegram config from env vars", () => {
+    const yml = `
+polling_interval: 5
+telegram:
+  bot_token: "yaml-token"
+  chat_id: "yaml-chat"
+sources:
+  repos: []
+  algora:
+    enabled: false
+    min_bounty: 0
+    languages: []
+    keywords_exclude: []
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    process.env.TELEGRAM_BOT_TOKEN = "env-token";
+    process.env.TELEGRAM_CHAT_ID = "env-chat";
+    try {
+      const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
+      expect(config.telegram.bot_token).toBe("env-token");
+      expect(config.telegram.chat_id).toBe("env-chat");
+    } finally {
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      delete process.env.TELEGRAM_CHAT_ID;
+    }
+  });
 });
 
 describe("ensureDataDir", () => {

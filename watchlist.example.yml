@@ -1,0 +1,27 @@
+# Bounty Hunter Watchlist Configuration
+#
+# Edit this file to add/remove repos and bounty sources.
+# Telegram secrets are injected from environment variables at runtime
+# (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) — the values below are placeholders.
+
+polling_interval: 15
+
+telegram:
+  bot_token: "set-via-env"
+  chat_id: "set-via-env"
+
+sources:
+  repos:
+    - name: Expensify/App
+      labels:
+        - "Help Wanted"
+      proposal_template: expensify
+      pre_filter:
+        keywords_exclude:
+          - "NewDot"
+
+  algora:
+    enabled: true
+    min_bounty: 50
+    languages: []
+    keywords_exclude: []

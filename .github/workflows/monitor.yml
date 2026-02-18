@@ -1,0 +1,48 @@
+name: Bounty Monitor
+
+on:
+  schedule:
+    # Every 15 minutes
+    - cron: "*/15 * * * *"
+  workflow_dispatch: # Allow manual triggers
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Prepare data directory
+        run: mkdir -p ~/.bounty-hunter
+
+      - name: Copy watchlist config
+        run: cp watchlist.example.yml ~/.bounty-hunter/watchlist.yml
+
+      - name: Restore seen.json from cache
+        id: seen-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.bounty-hunter/seen.json
+          key: seen-state
+
+      - name: Run monitor
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node dist/monitor.js
+
+      - name: Save seen.json to cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~/.bounty-hunter/seen.json
+          key: seen-state-${{ github.run_id }}

@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
+import { WatchlistConfigSchema } from "./types.js";
 import type { WatchlistConfig } from "./types.js";
 
 export function getDataDir(): string {
@@ -17,7 +18,16 @@ export function loadConfig(path?: string): WatchlistConfig {
     throw new Error(`Config not found: ${configPath}. Run /watchlist to set up.`);
   }
   const raw = readFileSync(configPath, "utf-8");
-  return parse(raw) as WatchlistConfig;
+  const parsed = parse(raw);
+
+  // Allow env vars to override Telegram secrets (for CI/GitHub Actions)
+  if (process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_CHAT_ID) {
+    parsed.telegram = parsed.telegram ?? {};
+    if (process.env.TELEGRAM_BOT_TOKEN) parsed.telegram.bot_token = process.env.TELEGRAM_BOT_TOKEN;
+    if (process.env.TELEGRAM_CHAT_ID) parsed.telegram.chat_id = process.env.TELEGRAM_CHAT_ID;
+  }
+
+  return WatchlistConfigSchema.parse(parsed);
 }
 
 export function ensureDataDir(baseDir?: string): void {
