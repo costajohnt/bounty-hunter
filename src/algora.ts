@@ -86,6 +86,7 @@ export function parseAlgoraResponse(
       bounty_amount: item.reward.amount / 100,
       bounty_formatted: item.reward_formatted,
       labels: [],
+      assignees: [],
       body: item.task.body,
       comment_count: 0,
       created_at: item.created_at,

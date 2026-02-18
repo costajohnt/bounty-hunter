@@ -82,6 +82,65 @@ sources:
   });
 });
 
+describe("filters defaults", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_DIR, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  it("fills in default filters when filters section is omitted", () => {
+    const yml = `
+polling_interval: 5
+telegram:
+  bot_token: "test-token"
+  chat_id: "12345"
+sources:
+  repos: []
+  algora:
+    enabled: false
+    min_bounty: 0
+    languages: []
+    keywords_exclude: []
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
+    expect(config.filters).toBeDefined();
+    expect(config.filters.max_age_days).toBe(7);
+    expect(config.filters.skip_assigned).toBe(true);
+    expect(config.filters.max_comment_count).toBe(5);
+    expect(config.filters.claimed_labels).toContain("Reviewing");
+  });
+
+  it("allows partial override of filters", () => {
+    const yml = `
+polling_interval: 5
+telegram:
+  bot_token: "test-token"
+  chat_id: "12345"
+filters:
+  max_age_days: 14
+  skip_assigned: false
+sources:
+  repos: []
+  algora:
+    enabled: false
+    min_bounty: 0
+    languages: []
+    keywords_exclude: []
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
+    expect(config.filters.max_age_days).toBe(14);
+    expect(config.filters.skip_assigned).toBe(false);
+    // Defaults still apply for unspecified fields
+    expect(config.filters.max_comment_count).toBe(5);
+    expect(config.filters.claimed_labels).toContain("Reviewing");
+  });
+});
+
 describe("ensureDataDir", () => {
   it("creates the data directory structure", () => {
     ensureDataDir(TEST_DIR);

@@ -62,6 +62,7 @@ describe("SeenStore", () => {
       bounty_amount: 500,
       bounty_formatted: "$500",
       labels: ["Help Wanted"],
+      assignees: [],
       body: "Performance is slow",
       comment_count: 3,
       created_at: "2026-02-05T00:00:00Z",

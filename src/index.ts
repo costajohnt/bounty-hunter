@@ -5,7 +5,7 @@ import { fetchRepoIssues } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { SeenStore } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
-import { applyPreFilter } from "./monitor.js";
+import { applyPreFilter, applyFreshnessFilter } from "./monitor.js";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -26,6 +26,7 @@ async function main() {
         const issues = fetchRepoIssues(repo.name, repo.labels);
         for (const issue of issues) {
           if (!applyPreFilter(issue, repo.pre_filter)) continue;
+          if (!applyFreshnessFilter(issue, config.filters)) continue;
           allIssues.push({ ...issue, is_new: !seen.hasSeen(issue.repo, issue.number) });
         }
       }
@@ -33,6 +34,7 @@ async function main() {
       if (config.sources.algora?.enabled) {
         const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
         for (const issue of bounties) {
+          if (!applyFreshnessFilter(issue, config.filters)) continue;
           allIssues.push({ ...issue, is_new: !seen.hasSeen(issue.repo, issue.number) });
         }
       }
