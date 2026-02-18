@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { applyPreFilter, applyFreshnessFilter } from "./monitor.js";
-import type { BountyIssue, Filters } from "./types.js";
+import { applyPreFilter, applyFreshnessFilter, shouldNotify } from "./monitor.js";
+import type { BountyIssue, Filters, VetResult } from "./types.js";
 
 const makeIssue = (overrides: Partial<BountyIssue> = {}): BountyIssue => ({
   source: "github",
@@ -144,5 +144,43 @@ describe("applyFreshnessFilter", () => {
       const issue = makeIssue({ comment_count: 100 });
       expect(applyFreshnessFilter(issue, { ...defaultFilters, max_comment_count: 0 })).toBe(true);
     });
+  });
+});
+
+describe("shouldNotify", () => {
+  const makeVetResult = (passed: boolean): VetResult => ({
+    passed,
+    signals: [],
+    proposal_count: 0,
+    has_approved_proposal: false,
+    summary: passed ? "Vetted: OK" : "Failed: access_requirements",
+  });
+
+  it("always notifies when no vet result is provided", () => {
+    expect(shouldNotify(undefined, "skip")).toBe(true);
+    expect(shouldNotify(undefined, "warn")).toBe(true);
+    expect(shouldNotify(undefined, "notify_all")).toBe(true);
+  });
+
+  it("always notifies when vetting passed", () => {
+    const passed = makeVetResult(true);
+    expect(shouldNotify(passed, "skip")).toBe(true);
+    expect(shouldNotify(passed, "warn")).toBe(true);
+    expect(shouldNotify(passed, "notify_all")).toBe(true);
+  });
+
+  it("skips notification on failed vetting with on_fail=skip", () => {
+    const failed = makeVetResult(false);
+    expect(shouldNotify(failed, "skip")).toBe(false);
+  });
+
+  it("notifies with warning on failed vetting with on_fail=warn", () => {
+    const failed = makeVetResult(false);
+    expect(shouldNotify(failed, "warn")).toBe(true);
+  });
+
+  it("notifies on failed vetting with on_fail=notify_all", () => {
+    const failed = makeVetResult(false);
+    expect(shouldNotify(failed, "notify_all")).toBe(true);
   });
 });

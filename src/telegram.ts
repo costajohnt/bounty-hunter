@@ -1,18 +1,45 @@
-import type { BountyIssue, TelegramConfig } from "./types.js";
+import type { BountyIssue, TelegramConfig, VetResult } from "./types.js";
 
 const API_BASE = "https://api.telegram.org/bot";
 
-export function formatBountyNotification(issue: BountyIssue): string {
+export function formatBountyNotification(
+  issue: BountyIssue,
+  vetResult?: VetResult
+): string {
   const source = issue.source === "algora" ? " (Algora)" : "";
   const bounty = issue.bounty_formatted ? ` — ${issue.bounty_formatted}` : "";
-  const labels = issue.labels.length ? `\nLabels: ${issue.labels.join(", ")}` : "";
+  const labels = issue.labels.length
+    ? `\nLabels: ${issue.labels.join(", ")}`
+    : "";
   const tech = issue.tech?.length ? `\nTech: ${issue.tech.join(", ")}` : "";
-  const proposals = `\nProposals: ${issue.comment_count}`;
+
+  // Use verified proposal count when available, fall back to raw comment count
+  const proposalCount = vetResult
+    ? vetResult.proposal_count
+    : issue.comment_count;
+  const proposals = `\nProposals: ${proposalCount}`;
+
+  // Determine emoji prefix and vetting status line
+  let prefix: string;
+  let vetLine: string;
+
+  if (vetResult) {
+    if (vetResult.passed) {
+      prefix = "\u2705"; // ✅
+      vetLine = `\nVetted: OK`;
+    } else {
+      prefix = "\u26a0\ufe0f"; // ⚠️
+      vetLine = `\n${vetResult.summary}`;
+    }
+  } else {
+    prefix = "\ud83c\udfaf"; // 🎯
+    vetLine = "";
+  }
 
   return [
-    `🎯 ${issue.repo} #${issue.number}${bounty}${source}`,
+    `${prefix} ${issue.repo} #${issue.number}${bounty}${source}`,
     `"${issue.title}"`,
-    `${labels}${tech}${proposals}`,
+    `${labels}${tech}${proposals}${vetLine}`,
     `\n${issue.url}`,
     `\nReply "skip" to dismiss`,
   ].join("\n");

@@ -141,6 +141,86 @@ sources:
   });
 });
 
+describe("vetting config defaults", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_DIR, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  it("fills in default vetting config when vetting section is omitted", () => {
+    const yml = `
+polling_interval: 5
+telegram:
+  bot_token: "test-token"
+  chat_id: "12345"
+sources:
+  repos: []
+  algora:
+    enabled: false
+    min_bounty: 0
+    languages: []
+    keywords_exclude: []
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
+    expect(config.vetting).toBeDefined();
+    expect(config.vetting.enabled).toBe(true);
+    expect(config.vetting.on_fail).toBe("skip");
+    expect(config.vetting.max_proposals).toBe(3);
+    expect(config.vetting.access_keywords).toContain("staging server");
+    expect(config.vetting.proposal_patterns).toContain("## Proposal");
+  });
+
+  it("allows partial override of vetting config", () => {
+    const yml = `
+polling_interval: 5
+telegram:
+  bot_token: "test-token"
+  chat_id: "12345"
+vetting:
+  on_fail: "warn"
+  max_proposals: 5
+sources:
+  repos: []
+  algora:
+    enabled: false
+    min_bounty: 0
+    languages: []
+    keywords_exclude: []
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
+    expect(config.vetting.on_fail).toBe("warn");
+    expect(config.vetting.max_proposals).toBe(5);
+    // Defaults still apply for unspecified fields
+    expect(config.vetting.enabled).toBe(true);
+    expect(config.vetting.access_keywords).toContain("staging server");
+  });
+
+  it("validates on_fail enum values", () => {
+    const yml = `
+polling_interval: 5
+telegram:
+  bot_token: "test-token"
+  chat_id: "12345"
+vetting:
+  on_fail: "invalid_value"
+sources:
+  repos: []
+  algora:
+    enabled: false
+    min_bounty: 0
+    languages: []
+    keywords_exclude: []
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    expect(() => loadConfig(join(TEST_DIR, "watchlist.yml"))).toThrow();
+  });
+});
+
 describe("ensureDataDir", () => {
   it("creates the data directory structure", () => {
     ensureDataDir(TEST_DIR);

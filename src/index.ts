@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
-import { fetchRepoIssues } from "./github.js";
+import { fetchRepoIssues, fetchIssueComments } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { SeenStore } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { applyPreFilter, applyFreshnessFilter } from "./monitor.js";
+import { vetIssue } from "./vet.js";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import type { BountyIssue, VetResult } from "./types.js";
+
+interface ScanResult extends BountyIssue {
+  is_new: boolean;
+  vetResult?: VetResult;
+}
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -20,14 +27,39 @@ async function main() {
       const dataDir = getDataDir();
       ensureDataDir(dataDir);
       const seen = new SeenStore(join(dataDir, "seen.json"));
-      const allIssues = [];
+      const vettingEnabled = config.vetting.enabled;
+      const allIssues: ScanResult[] = [];
 
       for (const repo of config.sources.repos) {
-        const issues = fetchRepoIssues(repo.name, repo.labels);
+        let issues: BountyIssue[];
+        try {
+          issues = fetchRepoIssues(repo.name, repo.labels);
+        } catch (err) {
+          console.error(`Error fetching ${repo.name}:`, err instanceof Error ? err.message : err);
+          continue;
+        }
         for (const issue of issues) {
           if (!applyPreFilter(issue, repo.pre_filter)) continue;
           if (!applyFreshnessFilter(issue, config.filters)) continue;
-          allIssues.push({ ...issue, is_new: !seen.hasSeen(issue.repo, issue.number) });
+
+          let vetResult: VetResult | undefined;
+          if (vettingEnabled) {
+            try {
+              const comments = fetchIssueComments(issue.repo, issue.number);
+              vetResult = vetIssue(issue, comments, config.vetting);
+            } catch (err) {
+              console.error(
+                `  Vetting error for ${issue.repo}#${issue.number}:`,
+                err instanceof Error ? err.message : err
+              );
+            }
+          }
+
+          allIssues.push({
+            ...issue,
+            is_new: !seen.hasSeen(issue.repo, issue.number),
+            ...(vetResult ? { vetResult } : {}),
+          });
         }
       }
 
@@ -35,7 +67,17 @@ async function main() {
         const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
         for (const issue of bounties) {
           if (!applyFreshnessFilter(issue, config.filters)) continue;
-          allIssues.push({ ...issue, is_new: !seen.hasSeen(issue.repo, issue.number) });
+
+          let vetResult: VetResult | undefined;
+          if (vettingEnabled) {
+            vetResult = vetIssue(issue, [], config.vetting);
+          }
+
+          allIssues.push({
+            ...issue,
+            is_new: !seen.hasSeen(issue.repo, issue.number),
+            ...(vetResult ? { vetResult } : {}),
+          });
         }
       }
 
@@ -45,7 +87,12 @@ async function main() {
         for (const issue of allIssues) {
           const marker = issue.is_new ? "NEW" : "   ";
           const bounty = issue.bounty_formatted ?? "    ";
-          console.log(`[${marker}] ${bounty.padEnd(8)} ${issue.repo}#${issue.number} — ${issue.title}`);
+          const vet = issue.vetResult
+            ? issue.vetResult.passed
+              ? " \u2705"
+              : " \u26a0\ufe0f"
+            : "";
+          console.log(`[${marker}] ${bounty.padEnd(8)} ${issue.repo}#${issue.number} — ${issue.title}${vet}`);
         }
       }
       break;

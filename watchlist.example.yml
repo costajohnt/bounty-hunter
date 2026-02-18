@@ -22,6 +22,34 @@ filters:
     - In Progress
   max_comment_count: 5         # Skip GitHub issues with >= N comments (0 = disabled)
 
+# Deep issue vetting (all optional — defaults shown)
+# Runs after cheap filters, analyzes issue body + fetched comments
+vetting:
+  enabled: true                # Master toggle for vetting
+  on_fail: "skip"              # "skip" = silent drop, "warn" = notify with warning, "notify_all" = ignore failures
+  max_proposals: 3             # Fail if >= N proposals already exist (0 = disabled)
+  require_bounty_label: false  # Require bounty amount OR label to pass
+  bounty_labels:               # Labels that confirm a bounty (when require_bounty_label is true)
+    - "Help Wanted"
+  access_keywords:             # Keywords indicating internal/private access required
+    - "staging server"
+    - "staging environment"
+    - "internal tool"
+    - "internal slack"
+    - "internal stack overflow"
+    - "stackoverflow.com/c/"
+    - "vpn"
+    - "internal wiki"
+    - "century"
+    - "admin console"
+    - "internal dashboard"
+    - "dev environment"
+    - "test account provided"
+  platform_keywords: []        # Keywords for platform-specific requirements (e.g., "iOS", "Android")
+  proposal_patterns:           # Patterns that identify a proposal comment
+    - "## Proposal"
+    - "### Please re-state the problem"
+
 sources:
   repos:
     - name: Expensify/App
