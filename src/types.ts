@@ -73,7 +73,7 @@ export const VettingConfigSchema = z.object({
   on_fail: z
     .enum(["skip", "warn", "notify_all"])
     .default(VETTING_DEFAULTS.on_fail),
-  max_proposals: z.number().default(VETTING_DEFAULTS.max_proposals),
+  max_proposals: z.number().int().min(0).default(VETTING_DEFAULTS.max_proposals),
   access_keywords: z
     .array(z.string())
     .default([...VETTING_DEFAULTS.access_keywords]),
@@ -147,18 +147,35 @@ export interface BountyIssue {
   tech?: string[];
 }
 
+export type GitHubAuthorAssociation =
+  | "OWNER"
+  | "MEMBER"
+  | "COLLABORATOR"
+  | "CONTRIBUTOR"
+  | "FIRST_TIMER"
+  | "FIRST_TIME_CONTRIBUTOR"
+  | "MANNEQUIN"
+  | "NONE";
+
 export interface IssueComment {
   author: string;
-  authorAssociation: string;
+  authorAssociation: GitHubAuthorAssociation;
   body: string;
   createdAt: string;
   url: string;
 }
 
+export type VetSignalName =
+  | "access_requirements"
+  | "competition"
+  | "bounty_confirmation"
+  | "platform_requirements";
+
 export interface VetSignal {
-  name: string;
+  name: VetSignalName;
   passed: boolean;
   detail: string;
+  found?: string[];
 }
 
 export interface VetResult {
@@ -166,7 +183,5 @@ export interface VetResult {
   signals: VetSignal[];
   proposal_count: number;
   has_approved_proposal: boolean;
-  access_keywords_found: string[];
-  platform_keywords_found: string[];
   summary: string;
 }

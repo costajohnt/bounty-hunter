@@ -36,8 +36,11 @@ async function main() {
             try {
               const comments = fetchIssueComments(issue.repo, issue.number);
               vetResult = vetIssue(issue, comments, config.vetting);
-            } catch {
-              // Vetting failure doesn't block scan output
+            } catch (err) {
+              console.error(
+                `  Vetting error for ${issue.repo}#${issue.number}:`,
+                err instanceof Error ? err.message : err
+              );
             }
           }
 

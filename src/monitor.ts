@@ -9,7 +9,6 @@ import { vetIssue } from "./vet.js";
 import type {
   BountyIssue,
   Filters,
-  IssueComment,
   RepoSource,
   VetResult,
   VettingConfig,
@@ -50,7 +49,7 @@ export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): bool
 
 /**
  * Determines whether to notify for an issue based on vetting result and on_fail mode.
- * Returns { notify, vetResult } — notify=true means send a Telegram message.
+ * Returns true if a Telegram message should be sent.
  */
 export function shouldNotify(
   vetResult: VetResult | undefined,
@@ -162,5 +161,8 @@ export async function runMonitor(): Promise<void> {
 // Entry point when run directly
 const isMain = fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isMain) {
-  runMonitor().catch(console.error);
+  runMonitor().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }

@@ -1,5 +1,6 @@
 import type {
   BountyIssue,
+  GitHubAuthorAssociation,
   IssueComment,
   VetSignal,
   VetResult,
@@ -10,16 +11,19 @@ import type {
 const INTERNAL_URL_RE = /\b\w+\.(internal|corp)\.\w+/i;
 const INTERNAL_SO_RE = /stackoverflow\.com\/c\//i;
 
-// Phrases from maintainers that indicate someone is already hired/approved
+// Phrases from maintainers that indicate someone is already hired/approved.
+// These are intentionally specific to avoid false positives — a maintainer
+// saying "design approved" or "PR approved" should NOT trigger this.
 const APPROVED_PHRASES = [
   "you're hired",
   "you are hired",
   "offer sent",
-  "approved",
+  "proposal approved",
+  "approved your proposal",
   "assigned to you",
 ];
 
-const MAINTAINER_ASSOCIATIONS = new Set([
+const MAINTAINER_ASSOCIATIONS: ReadonlySet<GitHubAuthorAssociation> = new Set([
   "MEMBER",
   "OWNER",
   "COLLABORATOR",
@@ -27,6 +31,8 @@ const MAINTAINER_ASSOCIATIONS = new Set([
 
 /**
  * Checks if the issue body or comments reference internal/private access tools.
+ * Matches against both configurable keywords and hardcoded URL patterns
+ * (*.internal.*, *.corp.*, stackoverflow.com/c/).
  */
 export function checkAccessRequirements(
   issue: BountyIssue,
@@ -69,6 +75,7 @@ export function checkAccessRequirements(
       name: "access_requirements",
       passed: false,
       detail: `Found access keywords: ${found.join(", ")}`,
+      found,
     };
   }
 
@@ -113,10 +120,10 @@ export function countProposals(
 
 /**
  * Checks if there are too many competing proposals or if someone is already hired.
+ * Accepts pre-computed proposal stats to avoid redundant iteration.
  */
 export function checkCompetition(
-  comments: IssueComment[],
-  patterns: string[],
+  proposalStats: { count: number; hasApproved: boolean },
   maxProposals: number
 ): VetSignal {
   // max_proposals = 0 means disabled
@@ -124,7 +131,7 @@ export function checkCompetition(
     return { name: "competition", passed: true, detail: "Competition check disabled" };
   }
 
-  const { count, hasApproved } = countProposals(comments, patterns);
+  const { count, hasApproved } = proposalStats;
 
   if (hasApproved) {
     return {
@@ -189,7 +196,8 @@ export function checkBountyConfirmation(
 }
 
 /**
- * Checks if the issue body mentions platform-specific requirements.
+ * Checks if the issue title or body mentions platform-specific requirements.
+ * Does not check comments — platform tags are typically in issue metadata.
  */
 export function checkPlatformRequirements(
   issue: BountyIssue,
@@ -213,6 +221,7 @@ export function checkPlatformRequirements(
       name: "platform_requirements",
       passed: false,
       detail: `Platform requirements found: ${found.join(", ")}`,
+      found,
     };
   }
 
@@ -227,9 +236,12 @@ export function vetIssue(
   comments: IssueComment[],
   config: VettingConfig
 ): VetResult {
+  // Count proposals once, share with competition check
+  const proposalStats = countProposals(comments, config.proposal_patterns);
+
   const signals: VetSignal[] = [
     checkAccessRequirements(issue, comments, config.access_keywords),
-    checkCompetition(comments, config.proposal_patterns, config.max_proposals),
+    checkCompetition(proposalStats, config.max_proposals),
     checkBountyConfirmation(
       issue,
       config.require_bounty_label,
@@ -237,21 +249,6 @@ export function vetIssue(
     ),
     checkPlatformRequirements(issue, config.platform_keywords),
   ];
-
-  const { count, hasApproved } = countProposals(
-    comments,
-    config.proposal_patterns
-  );
-
-  const accessSignal = signals.find((s) => s.name === "access_requirements")!;
-  const platformSignal = signals.find((s) => s.name === "platform_requirements")!;
-
-  const accessKeywordsFound = accessSignal.passed
-    ? []
-    : extractKeywordsFromDetail(accessSignal.detail);
-  const platformKeywordsFound = platformSignal.passed
-    ? []
-    : extractKeywordsFromDetail(platformSignal.detail);
 
   const passed = signals.every((s) => s.passed);
   const failedSignals = signals.filter((s) => !s.passed);
@@ -263,16 +260,8 @@ export function vetIssue(
   return {
     passed,
     signals,
-    proposal_count: count,
-    has_approved_proposal: hasApproved,
-    access_keywords_found: accessKeywordsFound,
-    platform_keywords_found: platformKeywordsFound,
+    proposal_count: proposalStats.count,
+    has_approved_proposal: proposalStats.hasApproved,
     summary,
   };
-}
-
-function extractKeywordsFromDetail(detail: string): string[] {
-  const match = detail.match(/: (.+)$/);
-  if (!match) return [];
-  return match[1].split(", ");
 }

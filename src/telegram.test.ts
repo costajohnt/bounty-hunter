@@ -55,8 +55,6 @@ describe("formatBountyNotification", () => {
       signals: [],
       proposal_count: 1,
       has_approved_proposal: false,
-      access_keywords_found: [],
-      platform_keywords_found: [],
       summary: "Vetted: OK",
     };
     const msg = formatBountyNotification(makeIssue(), vetResult);
@@ -71,8 +69,6 @@ describe("formatBountyNotification", () => {
       signals: [],
       proposal_count: 4,
       has_approved_proposal: false,
-      access_keywords_found: ["staging server"],
-      platform_keywords_found: [],
       summary: "Failed: access_requirements, competition",
     };
     const msg = formatBountyNotification(makeIssue(), vetResult);
@@ -88,8 +84,6 @@ describe("formatBountyNotification", () => {
       signals: [],
       proposal_count: 2,
       has_approved_proposal: false,
-      access_keywords_found: [],
-      platform_keywords_found: [],
       summary: "Vetted: OK",
     };
     const msg = formatBountyNotification(issue, vetResult);

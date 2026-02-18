@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import type { BountyIssue, IssueComment } from "./types.js";
+import type { BountyIssue, GitHubAuthorAssociation, IssueComment } from "./types.js";
 
 interface ParsedIssueUrl {
   owner: string;
@@ -81,7 +81,7 @@ export function fetchIssueComments(
   const raw = execFileSync("gh", args, { encoding: "utf-8", timeout: 30000 });
   const data = JSON.parse(raw) as {
     comments: Array<{
-      author: { login: string };
+      author: { login: string } | null;
       authorAssociation: string;
       body: string;
       createdAt: string;
@@ -89,8 +89,8 @@ export function fetchIssueComments(
     }>;
   };
   return data.comments.map((c) => ({
-    author: c.author.login,
-    authorAssociation: c.authorAssociation,
+    author: c.author?.login ?? "ghost",
+    authorAssociation: (c.authorAssociation ?? "NONE") as GitHubAuthorAssociation,
     body: c.body,
     createdAt: c.createdAt,
     url: c.url,

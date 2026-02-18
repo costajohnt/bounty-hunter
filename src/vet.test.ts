@@ -84,6 +84,7 @@ describe("checkAccessRequirements", () => {
     const result = checkAccessRequirements(issue, [], defaultAccessKeywords);
     expect(result.passed).toBe(false);
     expect(result.detail).toContain("staging server");
+    expect(result.found).toContain("staging server");
   });
 
   it("fails when keyword found in comments", () => {
@@ -95,7 +96,7 @@ describe("checkAccessRequirements", () => {
     ];
     const result = checkAccessRequirements(issue, comments, defaultAccessKeywords);
     expect(result.passed).toBe(false);
-    expect(result.detail).toContain("internal tool");
+    expect(result.found).toContain("internal tool");
   });
 
   it("is case-insensitive", () => {
@@ -110,7 +111,7 @@ describe("checkAccessRequirements", () => {
     });
     const result = checkAccessRequirements(issue, [], defaultAccessKeywords);
     expect(result.passed).toBe(false);
-    expect(result.detail).toContain("internal URL pattern");
+    expect(result.found).toContain("internal URL pattern");
   });
 
   it("detects internal URL patterns (*.corp.*)", () => {
@@ -119,7 +120,7 @@ describe("checkAccessRequirements", () => {
     });
     const result = checkAccessRequirements(issue, [], defaultAccessKeywords);
     expect(result.passed).toBe(false);
-    expect(result.detail).toContain("internal URL pattern");
+    expect(result.found).toContain("internal URL pattern");
   });
 
   it("detects stackoverflow.com/c/ (private Teams SO)", () => {
@@ -128,6 +129,17 @@ describe("checkAccessRequirements", () => {
     });
     const result = checkAccessRequirements(issue, [], defaultAccessKeywords);
     expect(result.passed).toBe(false);
+  });
+
+  it("does not double-count stackoverflow.com/c/ from keyword + regex match", () => {
+    const issue = makeIssue({
+      body: "See https://stackoverflow.com/c/expensify/q/123",
+    });
+    const result = checkAccessRequirements(issue, [], defaultAccessKeywords);
+    expect(result.passed).toBe(false);
+    // Should only appear once, not twice
+    const soMatches = result.found!.filter((f) => f.includes("stackoverflow"));
+    expect(soMatches).toHaveLength(1);
   });
 
   it("does not false-positive on normal text", () => {
@@ -139,13 +151,15 @@ describe("checkAccessRequirements", () => {
     expect(result.passed).toBe(true);
   });
 
-  it("detects keyword in body and comments combined", () => {
-    const issue = makeIssue({ body: "Use the staging server" });
-    const comments = [makeComment({ body: "Also needs VPN access" })];
+  it("populates found array with all detected keywords", () => {
+    const issue = makeIssue({ body: "Use the staging server and VPN" });
+    const comments = [makeComment({ body: "Also check internal wiki" })];
     const result = checkAccessRequirements(issue, comments, defaultAccessKeywords);
     expect(result.passed).toBe(false);
-    expect(result.detail).toContain("staging server");
-    expect(result.detail).toContain("vpn");
+    expect(result.found).toContain("staging server");
+    expect(result.found).toContain("vpn");
+    expect(result.found).toContain("internal wiki");
+    expect(result.found!.length).toBeGreaterThanOrEqual(3);
   });
 
   it("passes when no keywords configured", () => {
@@ -216,7 +230,7 @@ describe("countProposals", () => {
     const comments = [
       makeComment({
         authorAssociation: "COLLABORATOR",
-        body: "Approved! Please start working on it",
+        body: "We have approved your proposal!",
       }),
     ];
     const result = countProposals(comments, defaultProposalPatterns);
@@ -238,7 +252,18 @@ describe("countProposals", () => {
     const comments = [
       makeComment({
         authorAssociation: "CONTRIBUTOR",
-        body: "Approved by me!",
+        body: "Proposal approved by me!",
+      }),
+    ];
+    const result = countProposals(comments, defaultProposalPatterns);
+    expect(result.hasApproved).toBe(false);
+  });
+
+  it("does not false-positive on generic 'approved' without proposal context", () => {
+    const comments = [
+      makeComment({
+        authorAssociation: "MEMBER",
+        body: "Design approved, moving to implementation",
       }),
     ];
     const result = countProposals(comments, defaultProposalPatterns);
@@ -252,70 +277,53 @@ describe("countProposals", () => {
     const result = countProposals(comments, defaultProposalPatterns);
     expect(result.count).toBe(1);
   });
+
+  it("handles a comment that is both a proposal and an approval", () => {
+    const comments = [
+      makeComment({
+        authorAssociation: "MEMBER",
+        body: "## Proposal\nApproved your proposal! This is the way to go.",
+      }),
+    ];
+    const result = countProposals(comments, defaultProposalPatterns);
+    expect(result.count).toBe(1);
+    expect(result.hasApproved).toBe(true);
+  });
 });
 
 // --- Competition ---
 
 describe("checkCompetition", () => {
   it("passes when proposals are below threshold", () => {
-    const comments = [
-      makeComment({ body: "## Proposal\nFix here" }),
-      makeComment({ body: "Just a question" }),
-    ];
-    const result = checkCompetition(comments, defaultProposalPatterns, 3);
+    const result = checkCompetition({ count: 1, hasApproved: false }, 3);
     expect(result.passed).toBe(true);
   });
 
   it("fails when proposals meet threshold", () => {
-    const comments = [
-      makeComment({ body: "## Proposal\nFix 1" }),
-      makeComment({ body: "## Proposal\nFix 2" }),
-      makeComment({ body: "## Proposal\nFix 3" }),
-    ];
-    const result = checkCompetition(comments, defaultProposalPatterns, 3);
+    const result = checkCompetition({ count: 3, hasApproved: false }, 3);
     expect(result.passed).toBe(false);
     expect(result.detail).toContain("3 >= 3");
   });
 
   it("fails when proposals exceed threshold", () => {
-    const comments = [
-      makeComment({ body: "## Proposal\nFix 1" }),
-      makeComment({ body: "## Proposal\nFix 2" }),
-      makeComment({ body: "## Proposal\nFix 3" }),
-      makeComment({ body: "## Proposal\nFix 4" }),
-    ];
-    const result = checkCompetition(comments, defaultProposalPatterns, 3);
+    const result = checkCompetition({ count: 4, hasApproved: false }, 3);
     expect(result.passed).toBe(false);
   });
 
   it("fails instantly when a proposal is approved", () => {
-    const comments = [
-      makeComment({ body: "## Proposal\nFix 1" }),
-      makeComment({
-        authorAssociation: "MEMBER",
-        body: "You're hired!",
-      }),
-    ];
-    const result = checkCompetition(comments, defaultProposalPatterns, 10);
+    const result = checkCompetition({ count: 1, hasApproved: true }, 10);
     expect(result.passed).toBe(false);
     expect(result.detail).toContain("approved/hired");
   });
 
   it("passes when disabled (maxProposals = 0)", () => {
-    const comments = [
-      makeComment({ body: "## Proposal\nFix 1" }),
-      makeComment({ body: "## Proposal\nFix 2" }),
-      makeComment({ body: "## Proposal\nFix 3" }),
-      makeComment({ body: "## Proposal\nFix 4" }),
-      makeComment({ body: "## Proposal\nFix 5" }),
-    ];
-    const result = checkCompetition(comments, defaultProposalPatterns, 0);
+    const result = checkCompetition({ count: 5, hasApproved: false }, 0);
     expect(result.passed).toBe(true);
     expect(result.detail).toContain("disabled");
   });
 
-  it("passes with no comments", () => {
-    const result = checkCompetition([], defaultProposalPatterns, 3);
+  it("passes with zero proposals", () => {
+    const result = checkCompetition({ count: 0, hasApproved: false }, 3);
     expect(result.passed).toBe(true);
   });
 });
@@ -375,6 +383,15 @@ describe("checkBountyConfirmation", () => {
     expect(result.passed).toBe(false);
     expect(result.detail).toContain("No bounty amount");
   });
+
+  it("fails when bounty_amount is 0 and no bounty label present", () => {
+    const issue = makeIssue({
+      bounty_amount: 0,
+      labels: ["Bug"],
+    });
+    const result = checkBountyConfirmation(issue, true, ["Help Wanted"]);
+    expect(result.passed).toBe(false);
+  });
 });
 
 // --- Platform Requirements ---
@@ -390,7 +407,7 @@ describe("checkPlatformRequirements", () => {
     const issue = makeIssue({ body: "This requires iOS 17+ only" });
     const result = checkPlatformRequirements(issue, ["iOS 17"]);
     expect(result.passed).toBe(false);
-    expect(result.detail).toContain("iOS 17");
+    expect(result.found).toContain("iOS 17");
   });
 
   it("fails when keyword found in title", () => {
@@ -410,6 +427,13 @@ describe("checkPlatformRequirements", () => {
     const result = checkPlatformRequirements(issue, ["iOS", "Android"]);
     expect(result.passed).toBe(true);
   });
+
+  it("does not check comments (by design — platform tags are in issue metadata)", () => {
+    // checkPlatformRequirements only takes issue, not comments
+    const issue = makeIssue({ body: "Simple bug", title: "Fix crash" });
+    const result = checkPlatformRequirements(issue, ["iOS"]);
+    expect(result.passed).toBe(true);
+  });
 });
 
 // --- Orchestrator ---
@@ -422,8 +446,6 @@ describe("vetIssue", () => {
     expect(result.summary).toBe("Vetted: OK");
     expect(result.proposal_count).toBe(0);
     expect(result.has_approved_proposal).toBe(false);
-    expect(result.access_keywords_found).toEqual([]);
-    expect(result.platform_keywords_found).toEqual([]);
   });
 
   it("fails when access requirements fail", () => {
@@ -433,7 +455,19 @@ describe("vetIssue", () => {
     const result = vetIssue(issue, [], defaultVettingConfig);
     expect(result.passed).toBe(false);
     expect(result.summary).toContain("access_requirements");
-    expect(result.access_keywords_found).toContain("staging server");
+    const accessSignal = result.signals.find((s) => s.name === "access_requirements");
+    expect(accessSignal?.found).toContain("staging server");
+  });
+
+  it("populates found keywords on access signal via orchestrator", () => {
+    const issue = makeIssue({
+      body: "Needs VPN access and the staging server credentials",
+    });
+    const result = vetIssue(issue, [], defaultVettingConfig);
+    const accessSignal = result.signals.find((s) => s.name === "access_requirements");
+    expect(accessSignal?.found).toContain("vpn");
+    expect(accessSignal?.found).toContain("staging server");
+    expect(accessSignal!.found!.length).toBeGreaterThanOrEqual(2);
   });
 
   it("fails when competition check fails", () => {

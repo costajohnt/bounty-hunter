@@ -153,8 +153,6 @@ describe("shouldNotify", () => {
     signals: [],
     proposal_count: 0,
     has_approved_proposal: false,
-    access_keywords_found: [],
-    platform_keywords_found: [],
     summary: passed ? "Vetted: OK" : "Failed: access_requirements",
   });
 
