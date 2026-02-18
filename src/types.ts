@@ -43,6 +43,52 @@ const FiltersObjectSchema = z.object({
 
 export const FiltersSchema = FiltersObjectSchema;
 
+const VETTING_DEFAULTS = {
+  enabled: true,
+  on_fail: "skip" as const,
+  max_proposals: 3,
+  access_keywords: [
+    "staging server",
+    "staging environment",
+    "internal tool",
+    "internal slack",
+    "internal stack overflow",
+    "stackoverflow.com/c/",
+    "vpn",
+    "internal wiki",
+    "century",
+    "admin console",
+    "internal dashboard",
+    "dev environment",
+    "test account provided",
+  ],
+  platform_keywords: [] as string[],
+  proposal_patterns: ["## Proposal", "### Please re-state the problem"],
+  require_bounty_label: false,
+  bounty_labels: ["Help Wanted"],
+} as const;
+
+export const VettingConfigSchema = z.object({
+  enabled: z.boolean().default(VETTING_DEFAULTS.enabled),
+  on_fail: z
+    .enum(["skip", "warn", "notify_all"])
+    .default(VETTING_DEFAULTS.on_fail),
+  max_proposals: z.number().default(VETTING_DEFAULTS.max_proposals),
+  access_keywords: z
+    .array(z.string())
+    .default([...VETTING_DEFAULTS.access_keywords]),
+  platform_keywords: z.array(z.string()).default([]),
+  proposal_patterns: z
+    .array(z.string())
+    .default([...VETTING_DEFAULTS.proposal_patterns]),
+  require_bounty_label: z
+    .boolean()
+    .default(VETTING_DEFAULTS.require_bounty_label),
+  bounty_labels: z
+    .array(z.string())
+    .default([...VETTING_DEFAULTS.bounty_labels]),
+});
+
 export const WatchlistConfigSchema = z.object({
   polling_interval: z.number(),
   telegram: TelegramConfigSchema,
@@ -54,6 +100,16 @@ export const WatchlistConfigSchema = z.object({
     ...FILTER_DEFAULTS,
     claimed_labels: [...FILTER_DEFAULTS.claimed_labels],
   }),
+  vetting: VettingConfigSchema.optional().default({
+    enabled: VETTING_DEFAULTS.enabled,
+    on_fail: VETTING_DEFAULTS.on_fail,
+    max_proposals: VETTING_DEFAULTS.max_proposals,
+    access_keywords: [...VETTING_DEFAULTS.access_keywords],
+    platform_keywords: [...VETTING_DEFAULTS.platform_keywords],
+    proposal_patterns: [...VETTING_DEFAULTS.proposal_patterns],
+    require_bounty_label: VETTING_DEFAULTS.require_bounty_label,
+    bounty_labels: [...VETTING_DEFAULTS.bounty_labels],
+  }),
 });
 
 // Derive types from schemas
@@ -61,6 +117,7 @@ export type RepoSource = z.infer<typeof RepoSourceSchema>;
 export type AlgoraSource = z.infer<typeof AlgoraSourceSchema>;
 export type TelegramConfig = z.infer<typeof TelegramConfigSchema>;
 export type Filters = z.infer<typeof FiltersSchema>;
+export type VettingConfig = z.infer<typeof VettingConfigSchema>;
 export type WatchlistConfig = z.infer<typeof WatchlistConfigSchema>;
 
 // --- Non-config types (plain interfaces) ---
@@ -88,4 +145,28 @@ export interface BountyIssue {
   comment_count: number;
   created_at: string;
   tech?: string[];
+}
+
+export interface IssueComment {
+  author: string;
+  authorAssociation: string;
+  body: string;
+  createdAt: string;
+  url: string;
+}
+
+export interface VetSignal {
+  name: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface VetResult {
+  passed: boolean;
+  signals: VetSignal[];
+  proposal_count: number;
+  has_approved_proposal: boolean;
+  access_keywords_found: string[];
+  platform_keywords_found: string[];
+  summary: string;
 }

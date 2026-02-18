@@ -36,7 +36,7 @@ Two modes of operation:
 ```bash
 npm install
 npm run build    # Compile TypeScript to dist/
-npx vitest run   # Run all tests (32 tests across 8 files)
+npx vitest run   # Run all tests (109+ tests across 9 files)
 ```
 
 ## Architecture
@@ -46,10 +46,11 @@ src/
   types.ts               Shared interfaces (BountyIssue, WatchlistConfig, SeenIssue, etc.)
   config.ts              YAML config loader, data dir management (~/.bounty-hunter/)
   seen.ts                SeenStore — JSON-backed deduplication (seen.json)
-  github.ts              GitHub issue fetcher (wraps gh CLI via execFileSync)
+  github.ts              GitHub issue fetcher + comment fetcher (wraps gh CLI via execFileSync)
   algora.ts              Algora tRPC client (public API, amounts in cents)
-  telegram.ts            Telegram Bot API client (send messages, get updates)
-  monitor.ts             Background polling loop + pre-filter logic
+  telegram.ts            Telegram Bot API client (send messages, get updates, vet-enriched notifications)
+  vet.ts                 Issue vetting — rule-based checks (access, competition, bounty, platform)
+  monitor.ts             Background polling loop + pre-filter + vetting integration
   index.ts               CLI entry point (scan, notify, post-comment, seen, config)
   install-launchd.ts     macOS launchd plist generator and installer
 
@@ -87,23 +88,28 @@ templates/
 ## Core Types (src/types.ts)
 
 - `BountyIssue` — normalized issue from GitHub or Algora (source, repo, number, title, url, bounty_amount, labels, body)
-- `WatchlistConfig` — top-level config shape (polling_interval, telegram, sources)
+- `WatchlistConfig` — top-level config shape (polling_interval, telegram, sources, filters, vetting)
 - `RepoSource` — individual GitHub repo config (name, labels, proposal_template, pre_filter)
 - `AlgoraSource` — Algora config (enabled, min_bounty, languages, keywords_exclude)
 - `SeenIssue` — deduplication record (id, repo, number, title, seen_at, skipped)
 - `TelegramConfig` — bot_token + chat_id
+- `VettingConfig` — vetting rules (enabled, on_fail, max_proposals, access_keywords, platform_keywords, etc.)
+- `IssueComment` — GitHub comment (author, authorAssociation, body, createdAt, url)
+- `VetSignal` — individual vetting check result (name, passed, detail)
+- `VetResult` — aggregate vetting result (passed, signals, proposal_count, summary)
 
 ## Data Flow
 
 1. `config.ts` loads `~/.bounty-hunter/watchlist.yml` → `WatchlistConfig`
-2. `monitor.ts` iterates repos: `fetchRepoIssues()` → `applyPreFilter()` → `seen.hasSeen()` → `seen.markSeenFromBounty()`
-3. `monitor.ts` polls Algora: `fetchAlgoraBounties(buildAlgoraFilters())` → `seen.hasSeen()` → `seen.markSeenFromBounty()`
-4. New issues → `formatBountyNotification()` → `sendTelegramMessage()`
+2. `monitor.ts` iterates repos: `fetchRepoIssues()` → `applyPreFilter()` → `applyFreshnessFilter()` → `seen.markSeenFromBounty()`
+3. `monitor.ts` vets survivors: `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
+4. `monitor.ts` polls Algora: `fetchAlgoraBounties(buildAlgoraFilters())` → freshness → vet (body-only, no comments)
+5. New issues → `formatBountyNotification(issue, vetResult?)` → `sendTelegramMessage()`
 
 ## Testing
 
 - Tests live alongside source as `*.test.ts`
-- 32 tests across 8 files
+- 109+ tests across 9 files
 - Integration test (`integration.test.ts`) hits real GitHub API via `gh` — requires `gh auth status`
 - Integration test overrides `HOME` to isolate config; preserves `GH_CONFIG_DIR` for auth
 - Run: `npx vitest run` (all tests) or `npx vitest run src/github.test.ts` (single file)

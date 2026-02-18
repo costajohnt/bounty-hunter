@@ -1,11 +1,19 @@
 import { fileURLToPath } from "node:url";
 import { resolve, join } from "node:path";
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
-import { fetchRepoIssues } from "./github.js";
+import { fetchRepoIssues, fetchIssueComments } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { SeenStore } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
-import type { BountyIssue, Filters, RepoSource } from "./types.js";
+import { vetIssue } from "./vet.js";
+import type {
+  BountyIssue,
+  Filters,
+  IssueComment,
+  RepoSource,
+  VetResult,
+  VettingConfig,
+} from "./types.js";
 
 export function applyPreFilter(issue: BountyIssue, filter: RepoSource["pre_filter"]): boolean {
   if (!filter?.keywords_exclude?.length) return true;
@@ -40,13 +48,35 @@ export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): bool
   return true;
 }
 
+/**
+ * Determines whether to notify for an issue based on vetting result and on_fail mode.
+ * Returns { notify, vetResult } — notify=true means send a Telegram message.
+ */
+export function shouldNotify(
+  vetResult: VetResult | undefined,
+  onFail: VettingConfig["on_fail"]
+): boolean {
+  if (!vetResult) return true; // No vetting = always notify
+  if (vetResult.passed) return true;
+
+  switch (onFail) {
+    case "skip":
+      return false;
+    case "warn":
+      return true;
+    case "notify_all":
+      return true;
+  }
+}
+
 export async function runMonitor(): Promise<void> {
   const config = loadConfig();
   const dataDir = getDataDir();
   ensureDataDir(dataDir);
   const seen = new SeenStore(join(dataDir, "seen.json"));
+  const vettingEnabled = config.vetting.enabled;
 
-  const allNew: BountyIssue[] = [];
+  const allNew: Array<{ issue: BountyIssue; vetResult?: VetResult }> = [];
 
   // Poll GitHub repos
   for (const repo of config.sources.repos) {
@@ -56,8 +86,26 @@ export async function runMonitor(): Promise<void> {
         if (seen.hasSeen(issue.repo, issue.number)) continue;
         if (!applyPreFilter(issue, repo.pre_filter)) continue;
         if (!applyFreshnessFilter(issue, config.filters)) continue;
-        allNew.push(issue);
+
+        // Mark seen regardless of vetting outcome to prevent re-checking
         seen.markSeenFromBounty(issue);
+
+        // Vet the issue if enabled
+        let vetResult: VetResult | undefined;
+        if (vettingEnabled) {
+          try {
+            const comments = fetchIssueComments(issue.repo, issue.number);
+            vetResult = vetIssue(issue, comments, config.vetting);
+          } catch (err) {
+            // Broken vetting should never silently drop bounties — notify anyway
+            console.error(
+              `  Vetting error for ${issue.repo}#${issue.number}:`,
+              err
+            );
+          }
+        }
+
+        allNew.push({ issue, vetResult });
       }
     } catch (err) {
       console.error(`Error polling ${repo.name}:`, err);
@@ -71,8 +119,16 @@ export async function runMonitor(): Promise<void> {
       for (const issue of bounties) {
         if (seen.hasSeen(issue.repo, issue.number)) continue;
         if (!applyFreshnessFilter(issue, config.filters)) continue;
-        allNew.push(issue);
+
         seen.markSeenFromBounty(issue);
+
+        // Vet Algora issues with empty comments (body-based checks still apply)
+        let vetResult: VetResult | undefined;
+        if (vettingEnabled) {
+          vetResult = vetIssue(issue, [], config.vetting);
+        }
+
+        allNew.push({ issue, vetResult });
       }
     } catch (err) {
       console.error("Error polling Algora:", err);
@@ -87,9 +143,14 @@ export async function runMonitor(): Promise<void> {
 
   console.log(`[${new Date().toISOString()}] Found ${allNew.length} new bounties!`);
 
-  for (const issue of allNew) {
+  for (const { issue, vetResult } of allNew) {
+    if (!shouldNotify(vetResult, config.vetting.on_fail)) {
+      console.log(`  Skipped (vetting): ${issue.repo}#${issue.number} — ${vetResult?.summary}`);
+      continue;
+    }
+
     try {
-      const message = formatBountyNotification(issue);
+      const message = formatBountyNotification(issue, vetResult);
       await sendTelegramMessage(config.telegram, message);
       console.log(`  Notified: ${issue.repo}#${issue.number}`);
     } catch (err) {

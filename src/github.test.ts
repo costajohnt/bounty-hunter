@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseIssueUrl, buildSearchArgs } from "./github.js";
+import { parseIssueUrl, buildSearchArgs, buildIssueViewArgs } from "./github.js";
 
 describe("parseIssueUrl", () => {
   it("parses a standard GitHub issue URL", () => {
@@ -41,5 +41,28 @@ describe("buildSearchArgs", () => {
     // Each label should be preceded by --label
     const labelFlags = args.reduce((count, arg) => arg === "--label" ? count + 1 : count, 0);
     expect(labelFlags).toBe(3);
+  });
+});
+
+describe("buildIssueViewArgs", () => {
+  it("builds gh issue view args for fetching comments", () => {
+    const args = buildIssueViewArgs("Expensify/App", 81500);
+    expect(args).toContain("issue");
+    expect(args).toContain("view");
+    expect(args).toContain("81500");
+    expect(args).toContain("Expensify/App");
+    expect(args).toContain("comments");
+  });
+
+  it("uses --repo flag for the repo", () => {
+    const args = buildIssueViewArgs("Expensify/App", 100);
+    const repoIdx = args.indexOf("--repo");
+    expect(repoIdx).toBeGreaterThan(-1);
+    expect(args[repoIdx + 1]).toBe("Expensify/App");
+  });
+
+  it("passes issue number as string", () => {
+    const args = buildIssueViewArgs("foo/bar", 42);
+    expect(args).toContain("42");
   });
 });
