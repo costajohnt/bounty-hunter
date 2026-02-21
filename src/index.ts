@@ -65,20 +65,24 @@ async function main() {
       }
 
       if (config.sources.algora?.enabled) {
-        const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
-        for (const issue of bounties) {
-          if (!applyFreshnessFilter(issue, config.filters)) continue;
+        try {
+          const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
+          for (const issue of bounties) {
+            if (!applyFreshnessFilter(issue, config.filters)) continue;
 
-          let vetResult: VetResult | undefined;
-          if (vettingEnabled) {
-            vetResult = vetIssue(issue, [], config.vetting);
+            let vetResult: VetResult | undefined;
+            if (vettingEnabled) {
+              vetResult = vetIssue(issue, [], config.vetting);
+            }
+
+            allIssues.push({
+              ...issue,
+              is_new: !seen.hasSeen(issue.repo, issue.number),
+              ...(vetResult ? { vetResult } : {}),
+            });
           }
-
-          allIssues.push({
-            ...issue,
-            is_new: !seen.hasSeen(issue.repo, issue.number),
-            ...(vetResult ? { vetResult } : {}),
-          });
+        } catch (err) {
+          console.error("Error fetching Algora bounties:", err instanceof Error ? err.message : err);
         }
       }
 

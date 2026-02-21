@@ -24,7 +24,7 @@ function extractBountyFormatted(text: string): string | undefined {
   return match?.[1];
 }
 
-export function buildGlobalSearchArgs(config: GitHubSearchSource): string[] {
+export function buildGlobalSearchArgs(config: GitHubSearchSource, label: string): string[] {
   const args = [
     "search", "issues",
     "--state", "open",
@@ -32,12 +32,11 @@ export function buildGlobalSearchArgs(config: GitHubSearchSource): string[] {
     "--order", "desc",
     "--limit", String(config.max_results),
     "--json", "number,title,url,createdAt,labels,body,commentsCount,assignees,repository",
+    "--label", label,
   ];
-  for (const label of config.labels) {
-    args.push("--label", label);
-  }
-  for (const language of config.languages) {
-    args.push("--language", language);
+  // gh only supports one --language flag; use first configured language
+  if (config.languages.length > 0) {
+    args.push("--language", config.languages[0]);
   }
   return args;
 }
@@ -77,7 +76,7 @@ export function parseGlobalSearchResults(
       comment_count: item.commentsCount,
       created_at: item.createdAt,
       bounty_amount: extractBountyAmount(item.title + " " + item.body),
-      bounty_formatted: extractBountyFormatted(item.title),
+      bounty_formatted: extractBountyFormatted(item.title) ?? extractBountyFormatted(item.body),
     }));
 }
 
@@ -85,7 +84,38 @@ export function fetchGlobalBounties(
   config: GitHubSearchSource,
   watchedRepos?: string[],
 ): BountyIssue[] {
-  const args = buildGlobalSearchArgs(config);
-  const raw = execFileSync("gh", args, { encoding: "utf-8", timeout: 30000 });
-  return parseGlobalSearchResults(raw, config, watchedRepos);
+  const seenUrls = new Set<string>();
+  const allBounties: BountyIssue[] = [];
+
+  let failedLabels = 0;
+
+  for (const label of config.labels) {
+    const args = buildGlobalSearchArgs(config, label);
+    let raw: string;
+    try {
+      raw = execFileSync("gh", args, { encoding: "utf-8", timeout: 30000 });
+    } catch (err) {
+      failedLabels++;
+      console.error(
+        `  GitHub Search: failed to fetch label "${label}":`,
+        err instanceof Error ? err.message : err
+      );
+      continue;
+    }
+    const bounties = parseGlobalSearchResults(raw, config, watchedRepos);
+    for (const bounty of bounties) {
+      if (!seenUrls.has(bounty.url)) {
+        seenUrls.add(bounty.url);
+        allBounties.push(bounty);
+      }
+    }
+  }
+
+  if (failedLabels === config.labels.length && config.labels.length > 0) {
+    throw new Error(
+      `GitHub Global Search: all ${failedLabels} label searches failed. Check that 'gh' is installed and authenticated (gh auth status).`
+    );
+  }
+
+  return allBounties;
 }

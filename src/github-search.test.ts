@@ -28,7 +28,7 @@ function mockSearchResult(overrides: Partial<Record<string, unknown>> = {}) {
 
 describe("buildGlobalSearchArgs", () => {
   it("builds correct base flags", () => {
-    const args = buildGlobalSearchArgs(defaultConfig);
+    const args = buildGlobalSearchArgs(defaultConfig, "bounty");
     expect(args).toContain("search");
     expect(args).toContain("issues");
     expect(args).toContain("--state");
@@ -36,36 +36,44 @@ describe("buildGlobalSearchArgs", () => {
     expect(args).toContain("--limit");
   });
 
-  it("adds individual --label flags for multiple labels", () => {
-    const config = { ...defaultConfig, labels: ["bounty", "\u{1F4B0} bounty"] };
-    const args = buildGlobalSearchArgs(config);
-    const labelFlags = args.reduce((count, arg) => arg === "--label" ? count + 1 : count, 0);
-    expect(labelFlags).toBe(2);
-    expect(args).toContain("bounty");
-    expect(args).toContain("\u{1F4B0} bounty");
+  it("includes the given label as --label flag", () => {
+    const args = buildGlobalSearchArgs(defaultConfig, "bounty");
+    const labelIdx = args.indexOf("--label");
+    expect(labelIdx).toBeGreaterThan(-1);
+    expect(args[labelIdx + 1]).toBe("bounty");
   });
 
   it("adds --language when languages configured", () => {
     const config = { ...defaultConfig, languages: ["typescript"] };
-    const args = buildGlobalSearchArgs(config);
+    const args = buildGlobalSearchArgs(config, "bounty");
     expect(args).toContain("--language");
     expect(args).toContain("typescript");
   });
 
+  it("only uses first language when multiple configured", () => {
+    const config = { ...defaultConfig, languages: ["typescript", "python", "go"] };
+    const args = buildGlobalSearchArgs(config, "bounty");
+    const languageFlags = args.reduce((count, arg) => arg === "--language" ? count + 1 : count, 0);
+    expect(languageFlags).toBe(1);
+    expect(args).toContain("typescript");
+    expect(args).not.toContain("python");
+    expect(args).not.toContain("go");
+  });
+
   it("does not add --language when languages empty", () => {
-    const args = buildGlobalSearchArgs(defaultConfig);
+    const args = buildGlobalSearchArgs(defaultConfig, "bounty");
     expect(args).not.toContain("--language");
   });
 
   it("uses max_results for --limit value", () => {
     const config = { ...defaultConfig, max_results: 25 };
-    const args = buildGlobalSearchArgs(config);
+    const args = buildGlobalSearchArgs(config, "bounty");
     const limitIdx = args.indexOf("--limit");
     expect(args[limitIdx + 1]).toBe("25");
   });
 
   it("includes repository in --json fields", () => {
-    const args = buildGlobalSearchArgs(defaultConfig);
+    const args = buildGlobalSearchArgs(defaultConfig, "bounty");
     const jsonIdx = args.indexOf("--json");
     expect(args[jsonIdx + 1]).toContain("repository");
   });
@@ -86,6 +94,11 @@ describe("parseGlobalSearchResults", () => {
     expect(issues[0].created_at).toBe("2026-02-15T00:00:00Z");
   });
 
+  it("returns empty array for empty results", () => {
+    const issues = parseGlobalSearchResults("[]", defaultConfig);
+    expect(issues).toEqual([]);
+  });
+
   it("filters by min_stars", () => {
     const config = { ...defaultConfig, min_stars: 50 };
     const raw = mockSearchResult({ repository: { nameWithOwner: "small/repo", stargazerCount: 10 } });
@@ -96,6 +109,13 @@ describe("parseGlobalSearchResults", () => {
   it("filters by keywords_exclude in title", () => {
     const config = { ...defaultConfig, keywords_exclude: ["internal"] };
     const raw = mockSearchResult({ title: "Internal tool fix $100" });
+    const issues = parseGlobalSearchResults(raw, config);
+    expect(issues).toHaveLength(0);
+  });
+
+  it("filters by keywords_exclude in body", () => {
+    const config = { ...defaultConfig, keywords_exclude: ["confidential"] };
+    const raw = mockSearchResult({ title: "Fix bug $100", body: "This is a confidential project" });
     const issues = parseGlobalSearchResults(raw, config);
     expect(issues).toHaveLength(0);
   });
@@ -124,6 +144,19 @@ describe("parseGlobalSearchResults", () => {
     const raw = mockSearchResult({ title: "Fix the bug", body: "Reward: $250" });
     const issues = parseGlobalSearchResults(raw, defaultConfig);
     expect(issues[0].bounty_amount).toBe(250);
+  });
+
+  it("bounty_formatted falls back to body extraction", () => {
+    const raw = mockSearchResult({ title: "Fix the bug", body: "Reward: $250" });
+    const issues = parseGlobalSearchResults(raw, defaultConfig);
+    expect(issues[0].bounty_formatted).toBe("$250");
+  });
+
+  it("extracts comma-formatted bounty amounts", () => {
+    const raw = mockSearchResult({ title: "$1,000 bounty" });
+    const issues = parseGlobalSearchResults(raw, defaultConfig);
+    expect(issues[0].bounty_amount).toBe(1000);
+    expect(issues[0].bounty_formatted).toBe("$1,000");
   });
 
   it("keeps items that pass all filters", () => {

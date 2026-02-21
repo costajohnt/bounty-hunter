@@ -56,10 +56,16 @@ export function buildAlgoraUrl(params: AlgoraQueryParams): string {
 }
 
 function parseSingleResponse(raw: AlgoraResponse[]): { items: AlgoraItem[]; nextCursor: string | null } {
+  if (!raw.length) {
+    throw new Error("Algora API returned empty response array");
+  }
   const data = raw[0]?.result?.data?.json;
+  if (!data) {
+    throw new Error("Algora API response missing expected structure (result.data.json)");
+  }
   return {
-    items: data?.items ?? [],
-    nextCursor: data?.next_cursor ?? null,
+    items: data.items ?? [],
+    nextCursor: data.next_cursor ?? null,
   };
 }
 
@@ -124,10 +130,38 @@ export async function fetchAlgoraBounties(
 
   do {
     const url = buildAlgoraUrl({ limit: 50, cursor });
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Algora API error: ${response.status}`);
-    const data = (await response.json()) as AlgoraResponse[];
-    const { items, nextCursor } = parseSingleResponse(data);
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch (err) {
+      if (page === 0) throw new Error(`Algora API network error: ${err instanceof Error ? err.message : err}`);
+      console.error(`Algora API network error on page ${page + 1}. Returning ${allItems.length} items from previous pages.`);
+      break;
+    }
+    if (!response.ok) {
+      if (page === 0) throw new Error(`Algora API error: ${response.status}`);
+      console.error(`Algora API error ${response.status} on page ${page + 1}. Returning ${allItems.length} items from previous pages.`);
+      break;
+    }
+    let data: AlgoraResponse[];
+    try {
+      data = (await response.json()) as AlgoraResponse[];
+    } catch {
+      if (page === 0) throw new Error("Algora API returned invalid JSON");
+      console.error(`Algora API returned invalid JSON on page ${page + 1}. Returning ${allItems.length} items from previous pages.`);
+      break;
+    }
+    let items: AlgoraItem[];
+    let nextCursor: string | null;
+    try {
+      ({ items, nextCursor } = parseSingleResponse(data));
+    } catch (err) {
+      if (page === 0) throw err;
+      console.error(
+        `Algora API malformed response on page ${page + 1}. Returning ${allItems.length} items from previous pages.`
+      );
+      break;
+    }
     allItems.push(...items);
     cursor = nextCursor;
     page++;

@@ -91,4 +91,21 @@ describe("formatBountyNotification", () => {
     expect(msg).toContain("Proposals: 2");
     expect(msg).not.toContain("Proposals: 15");
   });
+
+  it("shows (Global) for github_search issues", () => {
+    const issue = makeIssue({
+      source: "github_search",
+      repo: "some-org/some-repo",
+      number: 42,
+      title: "Fix something",
+      url: "https://github.com/some-org/some-repo/issues/42",
+      bounty_amount: 500,
+      bounty_formatted: "$500",
+      labels: ["bounty"],
+      body: "",
+      comment_count: 0,
+    });
+    const result = formatBountyNotification(issue);
+    expect(result).toContain("(Global)");
+  });
 });
