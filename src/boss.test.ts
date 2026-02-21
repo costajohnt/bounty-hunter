@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { parseHId, parseBossResponse, buildBossFilters } from "./boss.js";
 import type { BossSource } from "./types.js";
 
@@ -99,6 +99,36 @@ describe("parseBossResponse", () => {
     const issues = parseBossResponse(items);
     expect(issues[0].labels).toEqual([]);
     expect(issues[0].assignees).toEqual([]);
+  });
+
+  it("sets created_at to a valid ISO timestamp", () => {
+    const items = [makeBossItem()];
+    const issues = parseBossResponse(items);
+    const date = new Date(issues[0].created_at);
+    expect(date.getTime()).not.toBeNaN();
+  });
+
+  it("logs warning for items with non-string hId", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const items = [makeBossItem({ hId: 123 })];
+    const issues = parseBossResponse(items);
+    expect(issues).toHaveLength(0);
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("skipping malformed item"),
+      expect.any(String),
+    );
+    spy.mockRestore();
+  });
+
+  it("logs warning for items with unparseable hId", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const items = [makeBossItem({ hId: "no-hash-here" })];
+    const issues = parseBossResponse(items);
+    expect(issues).toHaveLength(0);
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("unparseable hId"),
+    );
+    spy.mockRestore();
   });
 });
 

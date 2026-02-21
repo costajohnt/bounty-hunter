@@ -29,28 +29,37 @@ export function parseBossResponse(
 ): BountyIssue[] {
   return items
     .filter((item) => {
+      // Type validation first — prevents coercion bugs in downstream comparisons
+      if (typeof item.hId !== "string" || typeof item.usd !== "number") {
+        console.warn("Boss.dev: skipping malformed item:", item.title ?? "(no title)");
+        return false;
+      }
+      const parsed = parseHId(item.hId);
+      if (!parsed) {
+        console.warn(`Boss.dev: skipping item with unparseable hId: "${item.hId}"`);
+        return false;
+      }
       if (item.status !== "open") return false;
-      if (filters?.min_bounty && item.usd < filters.min_bounty) return false;
+      if (filters?.min_bounty && filters.min_bounty > 0 && item.usd < filters.min_bounty) return false;
       return true;
     })
     .map((item) => {
-      const parsed = parseHId(item.hId);
+      const parsed = parseHId(item.hId)!; // safe: validated in filter above
       return {
         source: "boss" as const,
-        repo: parsed?.repo ?? "",
-        number: parsed?.number ?? 0,
-        title: item.title,
-        url: item.url,
+        repo: parsed.repo,
+        number: parsed.number,
+        title: item.title ?? "(untitled)",
+        url: item.url ?? "",
         bounty_amount: item.usd,
         bounty_formatted: `$${item.usd.toLocaleString("en-US")}`,
         labels: [],
         assignees: [],
         body: "",
         comment_count: 0,
-        created_at: "",
+        created_at: new Date().toISOString(), // Boss API has no creation date; use fetch time
       };
-    })
-    .filter((issue) => issue.repo !== "" && issue.number !== 0);
+    });
 }
 
 /**
@@ -59,13 +68,23 @@ export function parseBossResponse(
 export async function fetchBossBounties(
   filters?: { min_bounty?: number }
 ): Promise<BountyIssue[]> {
-  const response = await fetch(BOSS_API);
+  let response: Response;
+  try {
+    response = await fetch(BOSS_API, { signal: AbortSignal.timeout(15_000) });
+  } catch (err) {
+    throw new Error(`Boss.dev API network error: ${err instanceof Error ? err.message : err}`);
+  }
   if (!response.ok) throw new Error(`Boss.dev API error: ${response.status}`);
-  const data = (await response.json()) as BossItem[];
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("Boss.dev API returned invalid JSON");
+  }
   if (!Array.isArray(data)) {
     throw new Error("Boss.dev API returned unexpected response format");
   }
-  return parseBossResponse(data, filters);
+  return parseBossResponse(data as BossItem[], filters);
 }
 
 /**
@@ -73,6 +92,6 @@ export async function fetchBossBounties(
  */
 export function buildBossFilters(boss: BossSource): { min_bounty?: number } {
   return {
-    min_bounty: boss.min_bounty || undefined,
+    min_bounty: boss.min_bounty > 0 ? boss.min_bounty : undefined,
   };
 }

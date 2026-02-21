@@ -92,6 +92,23 @@ describe("formatBountyNotification", () => {
     expect(msg).not.toContain("Proposals: 15");
   });
 
+  it("shows (Boss) for boss issues", () => {
+    const issue = makeIssue({
+      source: "boss",
+      repo: "org/repo",
+      number: 3,
+      title: "Add feature",
+      url: "https://github.com/org/repo/issues/3",
+      bounty_amount: 200,
+      bounty_formatted: "$200",
+      labels: [],
+      body: "",
+      comment_count: 0,
+    });
+    const result = formatBountyNotification(issue);
+    expect(result).toContain("(Boss)");
+  });
+
   it("shows (Global) for github_search issues", () => {
     const issue = makeIssue({
       source: "github_search",

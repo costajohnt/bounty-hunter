@@ -172,6 +172,8 @@ export async function runMonitor(): Promise<void> {
   }
 
   // Poll Boss.dev
+  // Note: Boss API has no creation dates — created_at is set to fetch time,
+  // so max_age_days effectively only filters via SeenStore dedup, not issue age.
   if (config.sources.boss?.enabled) {
     try {
       const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));

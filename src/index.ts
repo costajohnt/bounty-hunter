@@ -120,6 +120,8 @@ async function main() {
       }
 
       // Poll Boss.dev
+      // Note: Boss API has no creation dates — max_age_days is effectively a no-op.
+      // Cross-source dedup handled by SeenStore (repo#number key).
       if (config.sources.boss?.enabled) {
         try {
           const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));
