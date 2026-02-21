@@ -3,6 +3,7 @@ import { resolve, join } from "node:path";
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
 import { fetchRepoIssues, fetchIssueComments } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
+import { fetchGlobalBounties } from "./github-search.js";
 import { SeenStore } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { vetIssue } from "./vet.js";
@@ -31,7 +32,7 @@ export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): bool
   // GitHub-specific checks — Algora handles claiming at the API level and
   // hardcodes assignees/labels/comment_count to empty/zero, so these only
   // provide useful signal for GitHub issues.
-  if (issue.source === "github") {
+  if (issue.source === "github" || issue.source === "github_search") {
     if (filters.skip_assigned && issue.assignees.length > 0) return false;
 
     if (filters.claimed_labels.length > 0) {
@@ -135,6 +136,37 @@ export async function runMonitor(): Promise<void> {
       }
     } catch (err) {
       console.error("Error polling Algora:", err);
+    }
+  }
+
+  // Poll GitHub Global Search
+  if (config.sources.github_search?.enabled) {
+    try {
+      const watchedRepos = config.sources.repos.map((r) => r.name);
+      const bounties = fetchGlobalBounties(config.sources.github_search, watchedRepos);
+      for (const issue of bounties) {
+        if (seen.hasSeen(issue.repo, issue.number)) continue;
+        if (!applyFreshnessFilter(issue, config.filters)) continue;
+
+        seen.markSeenFromBounty(issue);
+
+        let vetResult: VetResult | undefined;
+        if (vettingEnabled) {
+          try {
+            const comments = fetchIssueComments(issue.repo, issue.number);
+            vetResult = vetIssue(issue, comments, config.vetting);
+          } catch (err) {
+            console.error(
+              `  Vetting error for ${issue.repo}#${issue.number}:`,
+              err
+            );
+          }
+        }
+
+        allNew.push({ issue, vetResult });
+      }
+    } catch (err) {
+      console.error("Error polling GitHub Global Search:", err);
     }
   }
 

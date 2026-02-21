@@ -151,6 +151,19 @@ describe("parseAlgoraResponse", () => {
   });
 });
 
+describe("buildAlgoraUrl with cursor", () => {
+  it("includes cursor in URL when provided", () => {
+    const url = buildAlgoraUrl({ cursor: "abc123" });
+    expect(url).toContain("abc123");
+  });
+
+  it("does not include cursor when null", () => {
+    const url = buildAlgoraUrl({ cursor: null });
+    const decoded = decodeURIComponent(url);
+    expect(decoded).not.toContain('"cursor"');
+  });
+});
+
 describe("buildAlgoraFilters", () => {
   it("converts AlgoraSource to filter params correctly", () => {
     const source: AlgoraSource = {
@@ -158,6 +171,7 @@ describe("buildAlgoraFilters", () => {
       min_bounty: 100,
       languages: ["typescript", "rust"],
       keywords_exclude: ["devops", "infra"],
+      max_pages: 3,
     };
     const filters = buildAlgoraFilters(source);
     expect(filters.min_bounty).toBe(100);
@@ -171,10 +185,23 @@ describe("buildAlgoraFilters", () => {
       min_bounty: 50,
       languages: [],
       keywords_exclude: [],
+      max_pages: 3,
     };
     const filters = buildAlgoraFilters(source);
     expect(filters.min_bounty).toBe(50);
     expect(filters.languages).toBeUndefined();
     expect(filters.keywords_exclude).toEqual([]);
+  });
+
+  it("passes max_pages through to filter params", () => {
+    const source: AlgoraSource = {
+      enabled: true,
+      min_bounty: 100,
+      languages: [],
+      keywords_exclude: [],
+      max_pages: 5,
+    };
+    const filters = buildAlgoraFilters(source);
+    expect(filters.max_pages).toBe(5);
   });
 });

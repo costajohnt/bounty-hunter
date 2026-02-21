@@ -145,6 +145,32 @@ describe("applyFreshnessFilter", () => {
       expect(applyFreshnessFilter(issue, { ...defaultFilters, max_comment_count: 0 })).toBe(true);
     });
   });
+
+  describe("github_search filtering", () => {
+    it("rejects github_search issues with assignees when skip_assigned is true", () => {
+      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+      const issue = makeIssue({ source: "github_search", assignees: ["someone"] });
+      expect(applyFreshnessFilter(issue, { ...defaultFilters, skip_assigned: true })).toBe(false);
+    });
+
+    it("rejects github_search issues with claimed labels", () => {
+      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+      const issue = makeIssue({ source: "github_search", labels: ["Reviewing"] });
+      expect(applyFreshnessFilter(issue, { ...defaultFilters, claimed_labels: ["Reviewing"] })).toBe(false);
+    });
+
+    it("rejects github_search issues exceeding comment count", () => {
+      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+      const issue = makeIssue({ source: "github_search", comment_count: 10 });
+      expect(applyFreshnessFilter(issue, { ...defaultFilters, max_comment_count: 5 })).toBe(false);
+    });
+
+    it("passes github_search issues that meet all criteria", () => {
+      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+      const issue = makeIssue({ source: "github_search", assignees: [], labels: ["bounty"], comment_count: 1 });
+      expect(applyFreshnessFilter(issue, defaultFilters)).toBe(true);
+    });
+  });
 });
 
 describe("shouldNotify", () => {
