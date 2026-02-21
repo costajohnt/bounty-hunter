@@ -156,9 +156,9 @@ export function checkBountyConfirmation(
   requireLabel: boolean,
   labels: string[]
 ): VetSignal {
-  // Algora issues have platform-confirmed bounties
-  if (issue.source === "algora") {
-    return { name: "bounty_confirmation", passed: true, detail: "Algora bounty (platform-confirmed)" };
+  // Algora and Boss.dev issues have platform-confirmed bounties
+  if (issue.source === "algora" || issue.source === "boss") {
+    return { name: "bounty_confirmation", passed: true, detail: "Platform-confirmed bounty" };
   }
 
   if (!requireLabel) {

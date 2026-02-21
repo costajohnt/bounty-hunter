@@ -4,6 +4,7 @@ import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
 import { fetchRepoIssues, fetchIssueComments } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { fetchGlobalBounties } from "./github-search.js";
+import { fetchBossBounties, buildBossFilters } from "./boss.js";
 import { SeenStore } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { applyPreFilter, applyFreshnessFilter } from "./monitor.js";
@@ -115,6 +116,29 @@ async function main() {
           }
         } catch (err) {
           console.error("Error fetching GitHub Global Search:", err instanceof Error ? err.message : err);
+        }
+      }
+
+      // Poll Boss.dev
+      if (config.sources.boss?.enabled) {
+        try {
+          const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));
+          for (const issue of bounties) {
+            if (!applyFreshnessFilter(issue, config.filters)) continue;
+
+            let vetResult: VetResult | undefined;
+            if (vettingEnabled) {
+              vetResult = vetIssue(issue, [], config.vetting);
+            }
+
+            allIssues.push({
+              ...issue,
+              is_new: !seen.hasSeen(issue.repo, issue.number),
+              ...(vetResult ? { vetResult } : {}),
+            });
+          }
+        } catch (err) {
+          console.error("Error fetching Boss.dev bounties:", err instanceof Error ? err.message : err);
         }
       }
 
