@@ -66,6 +66,12 @@ sources:
     languages: []
     keywords_exclude: []
 
+  # Boss.dev — bounties for open source software
+  # https://boss.dev — small catalog but platform-confirmed bounties
+  boss:
+    enabled: false             # Set to true to enable Boss.dev polling
+    min_bounty: 50             # Minimum bounty amount in USD (0 = no minimum)
+
   # GitHub Global Label Search — searches ALL of GitHub for bounty-labeled issues
   # This discovers bounties beyond your watched repos
   github_search:

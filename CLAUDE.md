@@ -14,7 +14,7 @@
 
 ## Project Overview
 
-Claude Code plugin that monitors GitHub repos, Algora, and GitHub Global Search for open bounty issues, sends Telegram notifications, and provides an AI-assisted `/claim` workflow to investigate codebases and draft proposals.
+Claude Code plugin that monitors GitHub repos, Algora, GitHub Global Search, and Boss.dev for open bounty issues, sends Telegram notifications, and provides an AI-assisted `/claim` workflow to investigate codebases and draft proposals.
 
 Two modes of operation:
 - **Background monitor** (no AI): standalone Node.js script run by launchd, polls APIs on a timer
@@ -48,6 +48,7 @@ src/
   seen.ts                SeenStore — JSON-backed deduplication (seen.json)
   github.ts              GitHub issue fetcher + comment fetcher (wraps gh CLI via execFileSync)
   github-search.ts       GitHub Global Search — search all of GitHub for bounty-labeled issues
+  boss.ts                  Boss.dev API client (public API, USD amounts)
   algora.ts              Algora tRPC client (public API, amounts in cents)
   telegram.ts            Telegram Bot API client (send messages, get updates, vet-enriched notifications)
   vet.ts                 Issue vetting — rule-based checks (access, competition, bounty, platform)
@@ -88,11 +89,12 @@ templates/
 
 ## Core Types (src/types.ts)
 
-- `BountyIssue` — normalized issue from GitHub, Algora, or GitHub Global Search (source: "github" | "algora" | "github_search")
+- `BountyIssue` — normalized issue from GitHub, Algora, GitHub Global Search, or Boss.dev (source: "github" | "algora" | "github_search" | "boss")
 - `WatchlistConfig` — top-level config shape (polling_interval, telegram, sources, filters, vetting)
 - `RepoSource` — individual GitHub repo config (name, labels, proposal_template, pre_filter)
 - `AlgoraSource` — Algora config (enabled, min_bounty, languages, keywords_exclude)
 - `GitHubSearchSource` — GitHub Global Search config (enabled, labels, languages, min_stars, keywords_exclude, max_results)
+- `BossSource` — Boss.dev config (enabled, min_bounty)
 - `SeenIssue` — deduplication record (id, repo, number, title, seen_at, skipped)
 - `TelegramConfig` — bot_token + chat_id
 - `VettingConfig` — vetting rules (enabled, on_fail, max_proposals, access_keywords, platform_keywords, etc.)
@@ -107,6 +109,7 @@ templates/
 3. `monitor.ts` vets survivors: `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
 4. `monitor.ts` polls Algora: `fetchAlgoraBounties(buildAlgoraFilters())` → freshness → vet (body-only, no comments)
 4.5. `monitor.ts` polls GitHub Global Search: `fetchGlobalBounties()` → dedup watched repos → `applyFreshnessFilter()` → `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
+4.6. `monitor.ts` polls Boss.dev: `fetchBossBounties(buildBossFilters())` → freshness → vet (body-only, no comments)
 5. New issues → `formatBountyNotification(issue, vetResult?)` → `sendTelegramMessage()`
 
 ## Testing

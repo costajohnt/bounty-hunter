@@ -30,6 +30,11 @@ export const GitHubSearchSourceSchema = z.object({
   max_results: z.number().default(50),
 });
 
+export const BossSourceSchema = z.object({
+  enabled: z.boolean().default(false),
+  min_bounty: z.number().default(0),
+});
+
 const TelegramConfigSchema = z.object({
   bot_token: z.string(),
   chat_id: z.string(),
@@ -106,6 +111,7 @@ export const WatchlistConfigSchema = z.object({
     repos: z.array(RepoSourceSchema),
     algora: AlgoraSourceSchema,
     github_search: GitHubSearchSourceSchema.optional(),
+    boss: BossSourceSchema.optional(),
   }),
   filters: FiltersObjectSchema.optional().default({
     ...FILTER_DEFAULTS,
@@ -127,6 +133,7 @@ export const WatchlistConfigSchema = z.object({
 export type RepoSource = z.infer<typeof RepoSourceSchema>;
 export type AlgoraSource = z.infer<typeof AlgoraSourceSchema>;
 export type GitHubSearchSource = z.infer<typeof GitHubSearchSourceSchema>;
+export type BossSource = z.infer<typeof BossSourceSchema>;
 export type TelegramConfig = z.infer<typeof TelegramConfigSchema>;
 export type Filters = z.infer<typeof FiltersSchema>;
 export type VettingConfig = z.infer<typeof VettingConfigSchema>;
@@ -143,7 +150,7 @@ export interface SeenIssue {
   skipped: boolean;
 }
 
-export type BountySourceType = "github" | "algora" | "github_search";
+export type BountySourceType = "github" | "algora" | "github_search" | "boss";
 
 export interface BountyIssue {
   source: BountySourceType;

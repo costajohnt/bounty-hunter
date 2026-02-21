@@ -171,6 +171,26 @@ describe("applyFreshnessFilter", () => {
       expect(applyFreshnessFilter(issue, defaultFilters)).toBe(true);
     });
   });
+
+  describe("boss filtering", () => {
+    it("skips GitHub-specific checks for boss issues (assignees, labels, comments)", () => {
+      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+      const issue = makeIssue({
+        source: "boss",
+        assignees: ["someone"],
+        labels: ["Reviewing"],
+        comment_count: 100,
+      });
+      // Boss issues skip assignee, claimed-label, and comment-count checks
+      expect(applyFreshnessFilter(issue, defaultFilters)).toBe(true);
+    });
+
+    it("still applies age check to boss issues", () => {
+      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-20T00:00:00Z").getTime());
+      const issue = makeIssue({ source: "boss", created_at: "2026-02-01T00:00:00Z" });
+      expect(applyFreshnessFilter(issue, defaultFilters)).toBe(false);
+    });
+  });
 });
 
 describe("shouldNotify", () => {

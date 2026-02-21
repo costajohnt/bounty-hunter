@@ -372,7 +372,18 @@ describe("checkBountyConfirmation", () => {
     });
     const result = checkBountyConfirmation(issue, true, ["Help Wanted"]);
     expect(result.passed).toBe(true);
-    expect(result.detail).toContain("Algora");
+    expect(result.detail).toContain("Platform-confirmed");
+  });
+
+  it("always passes for Boss.dev issues", () => {
+    const issue = makeIssue({
+      source: "boss",
+      bounty_amount: undefined,
+      labels: [],
+    });
+    const result = checkBountyConfirmation(issue, true, ["Help Wanted"]);
+    expect(result.passed).toBe(true);
+    expect(result.detail).toContain("Platform-confirmed");
   });
 
   it("passes when disabled (requireLabel = false)", () => {
