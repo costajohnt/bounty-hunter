@@ -3,6 +3,7 @@
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
 import { fetchRepoIssues, fetchIssueComments } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
+import { fetchGlobalBounties } from "./github-search.js";
 import { SeenStore } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { applyPreFilter, applyFreshnessFilter } from "./monitor.js";
@@ -78,6 +79,38 @@ async function main() {
             is_new: !seen.hasSeen(issue.repo, issue.number),
             ...(vetResult ? { vetResult } : {}),
           });
+        }
+      }
+
+      // Poll GitHub Global Search
+      if (config.sources.github_search?.enabled) {
+        try {
+          const watchedRepos = config.sources.repos.map((r) => r.name);
+          const bounties = fetchGlobalBounties(config.sources.github_search, watchedRepos);
+          for (const issue of bounties) {
+            if (!applyFreshnessFilter(issue, config.filters)) continue;
+
+            let vetResult: VetResult | undefined;
+            if (vettingEnabled) {
+              try {
+                const comments = fetchIssueComments(issue.repo, issue.number);
+                vetResult = vetIssue(issue, comments, config.vetting);
+              } catch (err) {
+                console.error(
+                  `  Vetting error for ${issue.repo}#${issue.number}:`,
+                  err instanceof Error ? err.message : err
+                );
+              }
+            }
+
+            allIssues.push({
+              ...issue,
+              is_new: !seen.hasSeen(issue.repo, issue.number),
+              ...(vetResult ? { vetResult } : {}),
+            });
+          }
+        } catch (err) {
+          console.error("Error fetching GitHub Global Search:", err instanceof Error ? err.message : err);
         }
       }
 

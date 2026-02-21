@@ -4,12 +4,14 @@ const ALGORA_BASE = "https://algora.io/api/trpc/bounty.list";
 
 interface AlgoraQueryParams {
   limit?: number;
+  cursor?: string | null;
 }
 
 interface AlgoraFilterParams {
   min_bounty?: number;
   languages?: string[];
   keywords_exclude?: string[];
+  max_pages?: number;
 }
 
 interface AlgoraItem {
@@ -42,25 +44,26 @@ interface AlgoraResponse {
 }
 
 export function buildAlgoraUrl(params: AlgoraQueryParams): string {
-  const input = {
-    "0": {
-      json: {
-        status: "open",
-        limit: params.limit ?? 50,
-
-
-      },
-    },
+  const json: Record<string, unknown> = {
+    status: "open",
+    limit: params.limit ?? 50,
   };
+  if (params.cursor) {
+    json.cursor = params.cursor;
+  }
+  const input = { "0": { json } };
   return `${ALGORA_BASE}?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`;
 }
 
-export function parseAlgoraResponse(
-  raw: AlgoraResponse[],
-  filters?: AlgoraFilterParams
-): BountyIssue[] {
-  const items = raw[0]?.result?.data?.json?.items ?? [];
+function parseSingleResponse(raw: AlgoraResponse[]): { items: AlgoraItem[]; nextCursor: string | null } {
+  const data = raw[0]?.result?.data?.json;
+  return {
+    items: data?.items ?? [],
+    nextCursor: data?.next_cursor ?? null,
+  };
+}
 
+function applyAlgoraFilters(items: AlgoraItem[], filters?: AlgoraFilterParams): BountyIssue[] {
   return items
     .filter((item) => {
       if (filters?.min_bounty && item.reward.amount / 100 < filters.min_bounty) {
@@ -94,20 +97,41 @@ export function parseAlgoraResponse(
     }));
 }
 
+export function parseAlgoraResponse(
+  raw: AlgoraResponse[],
+  filters?: AlgoraFilterParams
+): BountyIssue[] {
+  const { items } = parseSingleResponse(raw);
+  return applyAlgoraFilters(items, filters);
+}
+
 export function buildAlgoraFilters(algora: AlgoraSource): AlgoraFilterParams {
   return {
     min_bounty: algora.min_bounty,
     languages: algora.languages.length ? algora.languages : undefined,
     keywords_exclude: algora.keywords_exclude,
+    max_pages: algora.max_pages,
   };
 }
 
 export async function fetchAlgoraBounties(
   filters?: AlgoraFilterParams
 ): Promise<BountyIssue[]> {
-  const url = buildAlgoraUrl({ limit: 50 });
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Algora API error: ${response.status}`);
-  const data = (await response.json()) as AlgoraResponse[];
-  return parseAlgoraResponse(data, filters);
+  const maxPages = filters?.max_pages ?? 3;
+  const allItems: AlgoraItem[] = [];
+  let cursor: string | null = null;
+  let page = 0;
+
+  do {
+    const url = buildAlgoraUrl({ limit: 50, cursor });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Algora API error: ${response.status}`);
+    const data = (await response.json()) as AlgoraResponse[];
+    const { items, nextCursor } = parseSingleResponse(data);
+    allItems.push(...items);
+    cursor = nextCursor;
+    page++;
+  } while (cursor && page < maxPages);
+
+  return applyAlgoraFilters(allItems, filters);
 }

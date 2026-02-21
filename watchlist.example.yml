@@ -65,3 +65,18 @@ sources:
     min_bounty: 50
     languages: []
     keywords_exclude: []
+
+  # GitHub Global Label Search — searches ALL of GitHub for bounty-labeled issues
+  # This discovers bounties beyond your watched repos
+  github_search:
+    enabled: false             # Set to true to enable global search
+    labels:                    # GitHub labels to search for
+      - "bounty"
+      - "💰 bounty"
+    languages:                 # Filter by repo language (empty = all languages)
+      - typescript
+      - python
+      - go
+    min_stars: 50              # Only include repos with >= N stars (0 = disabled)
+    keywords_exclude: []       # Skip issues containing these keywords
+    max_results: 50            # Max results per search

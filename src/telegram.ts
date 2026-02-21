@@ -6,7 +6,7 @@ export function formatBountyNotification(
   issue: BountyIssue,
   vetResult?: VetResult
 ): string {
-  const source = issue.source === "algora" ? " (Algora)" : "";
+  const source = issue.source === "algora" ? " (Algora)" : issue.source === "github_search" ? " (Global)" : "";
   const bounty = issue.bounty_formatted ? ` — ${issue.bounty_formatted}` : "";
   const labels = issue.labels.length
     ? `\nLabels: ${issue.labels.join(", ")}`
