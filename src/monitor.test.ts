@@ -173,15 +173,26 @@ describe("applyFreshnessFilter", () => {
   });
 
   describe("boss filtering", () => {
-    it("skips GitHub-specific checks for boss issues (assignees, labels, comments)", () => {
+    it("applies assignee/label/comment checks to enriched boss issues", () => {
       vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
-      const issue = makeIssue({
-        source: "boss",
-        assignees: ["someone"],
-        labels: ["Reviewing"],
-        comment_count: 100,
-      });
-      // Boss issues skip assignee, claimed-label, and comment-count checks
+      // Enriched Boss issues have real metadata — filters should apply
+      expect(applyFreshnessFilter(
+        makeIssue({ source: "boss", assignees: ["someone"] }),
+        { ...defaultFilters, skip_assigned: true }
+      )).toBe(false);
+      expect(applyFreshnessFilter(
+        makeIssue({ source: "boss", labels: ["Reviewing"] }),
+        defaultFilters
+      )).toBe(false);
+      expect(applyFreshnessFilter(
+        makeIssue({ source: "boss", comment_count: 10 }),
+        { ...defaultFilters, max_comment_count: 5 }
+      )).toBe(false);
+    });
+
+    it("passes boss issues that meet all criteria", () => {
+      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+      const issue = makeIssue({ source: "boss", assignees: [], labels: [], comment_count: 1 });
       expect(applyFreshnessFilter(issue, defaultFilters)).toBe(true);
     });
 

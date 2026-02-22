@@ -109,13 +109,14 @@ templates/
 3. `monitor.ts` vets survivors: `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
 4. `monitor.ts` polls Algora: `fetchAlgoraBounties(buildAlgoraFilters())` → freshness → vet (body-only, no comments)
 4.5. `monitor.ts` polls GitHub Global Search: `fetchGlobalBounties()` → dedup watched repos → `applyFreshnessFilter()` → `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
-4.6. `monitor.ts` polls Boss.dev: `fetchBossBounties(buildBossFilters())` → freshness → vet (body-only, no comments)
+4.6. `monitor.ts` polls Boss.dev: `fetchBossBounties(buildBossFilters())` → `fetchIssueMetadata()` (enrich) → freshness → `fetchIssueComments()` → `vetIssue()`
+4.7. `index.ts` scan uses in-memory `Set<string>` for cross-source dedup within a single run
 5. New issues → `formatBountyNotification(issue, vetResult?)` → `sendTelegramMessage()`
 
 ## Testing
 
 - Tests live alongside source as `*.test.ts`
-- 140+ tests across 9 files
+- 174+ tests across 10 files
 - Integration test (`integration.test.ts`) hits real GitHub API via `gh` — requires `gh auth status`
 - Integration test overrides `HOME` to isolate config; preserves `GH_CONFIG_DIR` for auth
 - Run: `npx vitest run` (all tests) or `npx vitest run src/github.test.ts` (single file)

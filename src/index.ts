@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
-import { fetchRepoIssues, fetchIssueComments } from "./github.js";
+import { fetchRepoIssues, fetchIssueComments, fetchIssueMetadata } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { fetchGlobalBounties } from "./github-search.js";
 import { fetchBossBounties, buildBossFilters } from "./boss.js";
@@ -31,6 +31,7 @@ async function main() {
       const seen = new SeenStore(join(dataDir, "seen.json"));
       const vettingEnabled = config.vetting.enabled;
       const allIssues: ScanResult[] = [];
+      const seenThisScan = new Set<string>();
 
       for (const repo of config.sources.repos) {
         let issues: BountyIssue[];
@@ -41,6 +42,9 @@ async function main() {
           continue;
         }
         for (const issue of issues) {
+          const issueKey = `${issue.repo}#${issue.number}`;
+          if (seenThisScan.has(issueKey)) continue;
+          seenThisScan.add(issueKey);
           if (!applyPreFilter(issue, repo.pre_filter)) continue;
           if (!applyFreshnessFilter(issue, config.filters)) continue;
 
@@ -69,6 +73,9 @@ async function main() {
         try {
           const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
           for (const issue of bounties) {
+            const issueKey = `${issue.repo}#${issue.number}`;
+            if (seenThisScan.has(issueKey)) continue;
+            seenThisScan.add(issueKey);
             if (!applyFreshnessFilter(issue, config.filters)) continue;
 
             let vetResult: VetResult | undefined;
@@ -93,6 +100,9 @@ async function main() {
           const watchedRepos = config.sources.repos.map((r) => r.name);
           const bounties = fetchGlobalBounties(config.sources.github_search, watchedRepos);
           for (const issue of bounties) {
+            const issueKey = `${issue.repo}#${issue.number}`;
+            if (seenThisScan.has(issueKey)) continue;
+            seenThisScan.add(issueKey);
             if (!applyFreshnessFilter(issue, config.filters)) continue;
 
             let vetResult: VetResult | undefined;
@@ -120,17 +130,42 @@ async function main() {
       }
 
       // Poll Boss.dev
-      // Note: Boss API has no creation dates — max_age_days is effectively a no-op.
-      // Cross-source dedup handled by SeenStore (repo#number key).
       if (config.sources.boss?.enabled) {
         try {
           const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));
           for (const issue of bounties) {
+            const issueKey = `${issue.repo}#${issue.number}`;
+            if (seenThisScan.has(issueKey)) continue;
+            seenThisScan.add(issueKey);
+
+            // Enrich with GitHub metadata (real dates, labels, assignees, body)
+            try {
+              const meta = fetchIssueMetadata(issue.repo, issue.number);
+              issue.body = meta.body;
+              issue.labels = meta.labels;
+              issue.assignees = meta.assignees;
+              issue.comment_count = meta.comment_count;
+              issue.created_at = meta.created_at;
+            } catch (err) {
+              console.warn(
+                `Could not enrich ${issue.repo}#${issue.number} — filtering will use Boss.dev defaults (no age/label/assignee data):`,
+                err instanceof Error ? err.message : err
+              );
+            }
+
             if (!applyFreshnessFilter(issue, config.filters)) continue;
 
             let vetResult: VetResult | undefined;
             if (vettingEnabled) {
-              vetResult = vetIssue(issue, [], config.vetting);
+              try {
+                const comments = fetchIssueComments(issue.repo, issue.number);
+                vetResult = vetIssue(issue, comments, config.vetting);
+              } catch (err) {
+                console.error(
+                  `  Vetting error for ${issue.repo}#${issue.number}:`,
+                  err instanceof Error ? err.message : err
+                );
+              }
             }
 
             allIssues.push({
