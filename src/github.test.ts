@@ -162,4 +162,24 @@ describe("fetchIssueMetadata", () => {
 
     mockExecFileSync.mockReset();
   });
+
+  it("throws when gh CLI fails", async () => {
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error("gh: command not found");
+    });
+
+    const { fetchIssueMetadata } = await import("./github.js");
+    expect(() => fetchIssueMetadata("foo/bar", 1)).toThrow("gh: command not found");
+
+    mockExecFileSync.mockReset();
+  });
+
+  it("throws on malformed JSON from gh", async () => {
+    mockExecFileSync.mockReturnValue("not valid json");
+
+    const { fetchIssueMetadata } = await import("./github.js");
+    expect(() => fetchIssueMetadata("foo/bar", 1)).toThrow();
+
+    mockExecFileSync.mockReset();
+  });
 });

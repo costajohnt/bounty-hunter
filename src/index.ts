@@ -147,7 +147,10 @@ async function main() {
               issue.comment_count = meta.comment_count;
               issue.created_at = meta.created_at;
             } catch (err) {
-              console.warn(`Could not enrich ${issue.repo}#${issue.number}:`, err);
+              console.warn(
+                `Could not enrich ${issue.repo}#${issue.number} — filtering will use Boss.dev defaults (no age/label/assignee data):`,
+                err instanceof Error ? err.message : err
+              );
             }
 
             if (!applyFreshnessFilter(issue, config.filters)) continue;

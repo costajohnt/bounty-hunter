@@ -30,10 +30,10 @@ export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): bool
     if (ageDays > filters.max_age_days) return false;
   }
 
-  // GitHub-specific checks — Algora handles claiming at the API level and
-  // hardcodes assignees/labels/comment_count to empty/zero, so these only
-  // provide useful signal for GitHub issues.
-  if (issue.source === "github" || issue.source === "github_search") {
+  // Algora handles claiming at the API level and hardcodes
+  // assignees/labels/comment_count to empty/zero, so skip these checks.
+  // Boss.dev issues are enriched with real GitHub metadata before filtering.
+  if (issue.source !== "algora") {
     if (filters.skip_assigned && issue.assignees.length > 0) return false;
 
     if (filters.claimed_labels.length > 0) {
@@ -187,7 +187,10 @@ export async function runMonitor(): Promise<void> {
           issue.comment_count = meta.comment_count;
           issue.created_at = meta.created_at;
         } catch (err) {
-          console.warn(`Could not enrich ${issue.repo}#${issue.number}:`, err);
+          console.warn(
+            `Could not enrich ${issue.repo}#${issue.number} — filtering will use Boss.dev defaults (no age/label/assignee data):`,
+            err instanceof Error ? err.message : err
+          );
         }
 
         if (!applyFreshnessFilter(issue, config.filters)) continue;
