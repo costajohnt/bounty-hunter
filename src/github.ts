@@ -1,6 +1,14 @@
 import { execFileSync } from "node:child_process";
 import type { BountyIssue, GitHubAuthorAssociation, IssueComment } from "./types.js";
 
+export interface IssueMetadata {
+  body: string;
+  labels: string[];
+  assignees: string[];
+  comment_count: number;
+  created_at: string;
+}
+
 interface ParsedIssueUrl {
   owner: string;
   repo: string;
@@ -95,6 +103,40 @@ export function fetchIssueComments(
     createdAt: c.createdAt,
     url: c.url,
   }));
+}
+
+export function buildIssueMetadataArgs(repo: string, number: number): string[] {
+  return [
+    "issue",
+    "view",
+    String(number),
+    "--repo",
+    repo,
+    "--json",
+    "body,labels,assignees,createdAt,commentsCount",
+  ];
+}
+
+export function fetchIssueMetadata(
+  repo: string,
+  number: number
+): IssueMetadata {
+  const args = buildIssueMetadataArgs(repo, number);
+  const raw = execFileSync("gh", args, { encoding: "utf-8", timeout: 15000 });
+  const data = JSON.parse(raw) as {
+    body: string;
+    labels: Array<{ name: string }>;
+    assignees: Array<{ login: string }>;
+    createdAt: string;
+    commentsCount: number;
+  };
+  return {
+    body: data.body,
+    labels: data.labels.map((l) => l.name),
+    assignees: data.assignees.map((a) => a.login),
+    comment_count: data.commentsCount,
+    created_at: data.createdAt,
+  };
 }
 
 function extractBountyAmount(text: string): number | undefined {

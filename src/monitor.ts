@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { resolve, join } from "node:path";
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
-import { fetchRepoIssues, fetchIssueComments } from "./github.js";
+import { fetchRepoIssues, fetchIssueComments, fetchIssueMetadata } from "./github.js";
 import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { fetchGlobalBounties } from "./github-search.js";
 import { fetchBossBounties, buildBossFilters } from "./boss.js";
@@ -172,20 +172,39 @@ export async function runMonitor(): Promise<void> {
   }
 
   // Poll Boss.dev
-  // Note: Boss API has no creation dates — created_at is set to fetch time,
-  // so max_age_days effectively only filters via SeenStore dedup, not issue age.
   if (config.sources.boss?.enabled) {
     try {
       const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));
       for (const issue of bounties) {
         if (seen.hasSeen(issue.repo, issue.number)) continue;
+
+        // Enrich with GitHub metadata (real dates, labels, assignees, body)
+        try {
+          const meta = fetchIssueMetadata(issue.repo, issue.number);
+          issue.body = meta.body;
+          issue.labels = meta.labels;
+          issue.assignees = meta.assignees;
+          issue.comment_count = meta.comment_count;
+          issue.created_at = meta.created_at;
+        } catch (err) {
+          console.warn(`Could not enrich ${issue.repo}#${issue.number}:`, err);
+        }
+
         if (!applyFreshnessFilter(issue, config.filters)) continue;
 
         seen.markSeenFromBounty(issue);
 
         let vetResult: VetResult | undefined;
         if (vettingEnabled) {
-          vetResult = vetIssue(issue, [], config.vetting);
+          try {
+            const comments = fetchIssueComments(issue.repo, issue.number);
+            vetResult = vetIssue(issue, comments, config.vetting);
+          } catch (err) {
+            console.error(
+              `  Vetting error for ${issue.repo}#${issue.number}:`,
+              err
+            );
+          }
         }
 
         allNew.push({ issue, vetResult });
