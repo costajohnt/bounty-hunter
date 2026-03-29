@@ -152,6 +152,9 @@ export interface SeenIssue {
 
 export type BountySourceType = "github" | "algora" | "github_search" | "boss";
 
+export type BountyConfidence = "api" | "text_extract";
+export type BountyCurrency = "USD" | "unknown";
+
 export interface BountyIssue {
   source: BountySourceType;
   repo: string;
@@ -160,6 +163,8 @@ export interface BountyIssue {
   url: string;
   bounty_amount?: number;
   bounty_formatted?: string;
+  bounty_confidence?: BountyConfidence;
+  bounty_currency?: BountyCurrency;
   labels: string[];
   assignees: string[];
   body: string;
