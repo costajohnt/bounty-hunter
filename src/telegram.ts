@@ -7,7 +7,8 @@ export function formatBountyNotification(
   vetResult?: VetResult
 ): string {
   const source = issue.source === "algora" ? " (Algora)" : issue.source === "github_search" ? " (Global)" : issue.source === "boss" ? " (Boss)" : "";
-  const bounty = issue.bounty_formatted ? ` — ${issue.bounty_formatted}` : "";
+  const confidenceTag = issue.bounty_confidence === "text_extract" ? " ~" : "";
+  const bounty = issue.bounty_formatted ? ` — ${issue.bounty_formatted}${confidenceTag}` : "";
   const labels = issue.labels.length
     ? `\nLabels: ${issue.labels.join(", ")}`
     : "";
