@@ -66,6 +66,8 @@ export function fetchRepoIssues(repo: string, labels: string[]): BountyIssue[] {
     created_at: issue.createdAt,
     bounty_amount: extractBountyAmount(issue.title + " " + issue.body),
     bounty_formatted: extractBountyFormatted(issue.title),
+    bounty_confidence: "text_extract" as const,
+    bounty_currency: "unknown" as const,
   }));
 }
 
