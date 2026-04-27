@@ -10,6 +10,8 @@ const makeIssue = (overrides: Partial<BountyIssue> = {}): BountyIssue => ({
   url: "https://github.com/Expensify/App/issues/81500",
   bounty_amount: 250,
   bounty_formatted: "$250",
+  bounty_confidence: "text_extract",
+  bounty_currency: "unknown",
   labels: ["Help Wanted", "Bug"],
   assignees: [],
   body: "Some description",
@@ -30,7 +32,7 @@ describe("formatBountyNotification", () => {
     expect(msg).toContain("\ud83c\udfaf");
   });
 
-  it("formats an Algora bounty issue", () => {
+  it("formats an Algora bounty issue with api confidence", () => {
     const issue = makeIssue({
       source: "algora",
       repo: "coolify/coolify",
@@ -39,6 +41,8 @@ describe("formatBountyNotification", () => {
       url: "https://github.com/coolify/coolify/issues/8154",
       bounty_amount: 6900,
       bounty_formatted: "$6,900",
+      bounty_confidence: "api",
+      bounty_currency: "USD",
       labels: [],
       body: "",
       comment_count: 0,
@@ -47,6 +51,7 @@ describe("formatBountyNotification", () => {
     const msg = formatBountyNotification(issue);
     expect(msg).toContain("$6,900");
     expect(msg).toContain("Algora");
+    expect(msg).toContain("✓ api / USD");
   });
 
   it("shows checkmark and OK for passed vetting", () => {
@@ -92,7 +97,7 @@ describe("formatBountyNotification", () => {
     expect(msg).not.toContain("Proposals: 15");
   });
 
-  it("shows (Boss) for boss issues", () => {
+  it("shows (Boss) for boss issues with api confidence", () => {
     const issue = makeIssue({
       source: "boss",
       repo: "org/repo",
@@ -101,15 +106,18 @@ describe("formatBountyNotification", () => {
       url: "https://github.com/org/repo/issues/3",
       bounty_amount: 200,
       bounty_formatted: "$200",
+      bounty_confidence: "api",
+      bounty_currency: "USD",
       labels: [],
       body: "",
       comment_count: 0,
     });
     const result = formatBountyNotification(issue);
     expect(result).toContain("(Boss)");
+    expect(result).toContain("✓ api / USD");
   });
 
-  it("shows (Global) for github_search issues", () => {
+  it("shows (Global) for github_search issues with text_extract confidence", () => {
     const issue = makeIssue({
       source: "github_search",
       repo: "some-org/some-repo",
@@ -118,11 +126,20 @@ describe("formatBountyNotification", () => {
       url: "https://github.com/some-org/some-repo/issues/42",
       bounty_amount: 500,
       bounty_formatted: "$500",
+      bounty_confidence: "text_extract",
+      bounty_currency: "unknown",
       labels: ["bounty"],
       body: "",
       comment_count: 0,
     });
     const result = formatBountyNotification(issue);
     expect(result).toContain("(Global)");
+    expect(result).toContain("~ text_extract / unknown");
+  });
+
+  it("does not show confidence when bounty_confidence is not set", () => {
+    const issue = makeIssue({ bounty_confidence: undefined, bounty_currency: undefined });
+    const result = formatBountyNotification(issue);
+    expect(result).not.toContain("Bounty:");
   });
 });
