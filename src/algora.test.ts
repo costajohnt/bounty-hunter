@@ -49,6 +49,8 @@ describe("parseAlgoraResponse", () => {
     expect(issues[0].bounty_amount).toBe(250);
     expect(issues[0].repo).toBe("test/repo");
     expect(issues[0].source).toBe("algora");
+    expect(issues[0].bounty_confidence).toBe("api");
+    expect(issues[0].bounty_currency).toBe("USD");
   });
 
   it("filters by minimum bounty", () => {

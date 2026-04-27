@@ -80,7 +80,7 @@ describe("buildGlobalSearchArgs", () => {
 });
 
 describe("parseGlobalSearchResults", () => {
-  it("maps results to BountyIssue with github_search source", () => {
+  it("maps results to BountyIssue with github_search source and text_extract confidence", () => {
     const issues = parseGlobalSearchResults(mockSearchResult(), defaultConfig);
     expect(issues).toHaveLength(1);
     expect(issues[0].source).toBe("github_search");
@@ -92,6 +92,8 @@ describe("parseGlobalSearchResults", () => {
     expect(issues[0].body).toBe("Bug description");
     expect(issues[0].comment_count).toBe(2);
     expect(issues[0].created_at).toBe("2026-02-15T00:00:00Z");
+    expect(issues[0].bounty_confidence).toBe("text_extract");
+    expect(issues[0].bounty_currency).toBe("unknown");
   });
 
   it("returns empty array for empty results", () => {

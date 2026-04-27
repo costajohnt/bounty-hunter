@@ -183,3 +183,62 @@ describe("fetchIssueMetadata", () => {
     mockExecFileSync.mockReset();
   });
 });
+
+describe("fetchRepoIssues", () => {
+  it("maps issues with text_extract confidence metadata", async () => {
+    const mockResponse = JSON.stringify([
+      {
+        number: 1,
+        title: "Fix bug $500",
+        url: "https://github.com/foo/bar/issues/1",
+        createdAt: "2025-01-15T10:00:00Z",
+        labels: [{ name: "bug" }],
+        assignees: [{ login: "alice" }],
+        body: "Please fix this",
+        commentsCount: 3,
+      },
+    ]);
+
+    mockExecFileSync.mockReturnValue(mockResponse);
+
+    const { fetchRepoIssues } = await import("./github.js");
+    const issues = fetchRepoIssues("foo/bar", ["Help Wanted"]);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].source).toBe("github");
+    expect(issues[0].bounty_confidence).toBe("text_extract");
+    expect(issues[0].bounty_currency).toBe("unknown");
+    expect(issues[0].bounty_amount).toBe(500);
+
+    mockExecFileSync.mockReset();
+  });
+
+  it("handles no bounty in title or body", async () => {
+    const mockResponse = JSON.stringify([
+      {
+        number: 1,
+        title: "Fix bug",
+        url: "https://github.com/foo/bar/issues/1",
+        createdAt: "2025-01-15T10:00:00Z",
+        labels: [],
+        assignees: [],
+        body: "No dollar amount here",
+        commentsCount: 0,
+      },
+    ]);
+
+    mockExecFileSync.mockReturnValue(mockResponse);
+
+    const { fetchRepoIssues } = await import("./github.js");
+    const issues = fetchRepoIssues("foo/bar", ["Help Wanted"]);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].bounty_amount).toBeUndefined();
+    expect(issues[0].bounty_formatted).toBeUndefined();
+    // Confidence metadata should still be present even without bounty amount
+    expect(issues[0].bounty_confidence).toBe("text_extract");
+    expect(issues[0].bounty_currency).toBe("unknown");
+
+    mockExecFileSync.mockReset();
+  });
+});
