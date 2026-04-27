@@ -160,6 +160,8 @@ export interface BountyIssue {
   url: string;
   bounty_amount?: number;
   bounty_formatted?: string;
+  bounty_confidence?: "api" | "text_extract";
+  bounty_currency?: "USD" | "unknown";
   labels: string[];
   assignees: string[];
   body: string;
