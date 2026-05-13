@@ -12,6 +12,9 @@ export function formatBountyNotification(
     ? `\nLabels: ${issue.labels.join(", ")}`
     : "";
   const tech = issue.tech?.length ? `\nTech: ${issue.tech.join(", ")}` : "";
+  const confidence = issue.bounty_confidence
+    ? `\nBounty confidence: ${issue.bounty_confidence}${issue.bounty_confidence_reason ? ` (${issue.bounty_confidence_reason})` : ""}`
+    : "";
 
   // Use verified proposal count when available, fall back to raw comment count
   const proposalCount = vetResult
@@ -39,7 +42,7 @@ export function formatBountyNotification(
   return [
     `${prefix} ${issue.repo} #${issue.number}${bounty}${source}`,
     `"${issue.title}"`,
-    `${labels}${tech}${proposals}${vetLine}`,
+    `${labels}${tech}${confidence}${proposals}${vetLine}`,
     `\n${issue.url}`,
     `\nReply "skip" to dismiss`,
   ].join("\n");

@@ -160,6 +160,8 @@ export interface BountyIssue {
   url: string;
   bounty_amount?: number;
   bounty_formatted?: string;
+  bounty_confidence?: "high" | "low";
+  bounty_confidence_reason?: string;
   labels: string[];
   assignees: string[];
   body: string;
