@@ -53,6 +53,8 @@ export function parseBossResponse(
         url: item.url ?? "",
         bounty_amount: item.usd,
         bounty_formatted: `$${item.usd.toLocaleString("en-US")}`,
+        bounty_confidence: "high",
+        bounty_confidence_reason: "Boss.dev API-sourced USD amount",
         labels: [],
         assignees: [],
         body: "",

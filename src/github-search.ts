@@ -77,6 +77,10 @@ export function parseGlobalSearchResults(
       created_at: item.createdAt,
       bounty_amount: extractBountyAmount(item.title + " " + item.body),
       bounty_formatted: extractBountyFormatted(item.title) ?? extractBountyFormatted(item.body),
+      bounty_confidence: extractBountyAmount(item.title + " " + item.body) ? "low" : undefined,
+      bounty_confidence_reason: extractBountyAmount(item.title + " " + item.body)
+        ? "GitHub text regex extraction; verify manually"
+        : undefined,
     }));
 }
 

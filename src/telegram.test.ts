@@ -92,6 +92,15 @@ describe("formatBountyNotification", () => {
     expect(msg).not.toContain("Proposals: 15");
   });
 
+  it("shows bounty confidence metadata", () => {
+    const msg = formatBountyNotification(makeIssue({
+      bounty_confidence: "low",
+      bounty_confidence_reason: "GitHub text regex extraction; verify manually",
+    }));
+    expect(msg).toContain("Bounty confidence: low");
+    expect(msg).toContain("verify manually");
+  });
+
   it("shows (Boss) for boss issues", () => {
     const issue = makeIssue({
       source: "boss",

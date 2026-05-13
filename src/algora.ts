@@ -94,6 +94,8 @@ function applyAlgoraFilters(items: AlgoraItem[], filters?: AlgoraFilterParams): 
       url: item.task.url,
       bounty_amount: item.reward.amount / 100,
       bounty_formatted: item.reward_formatted,
+      bounty_confidence: "high",
+      bounty_confidence_reason: "Algora API-sourced reward",
       labels: [],
       assignees: [],
       body: item.task.body,
