@@ -166,6 +166,11 @@ export interface BountyIssue {
   comment_count: number;
   created_at: string;
   tech?: string[];
+  /** Confidence of the bounty amount source. "api" = validated, "text_extract" = regex from title/body */
+  bounty_confidence?: "api" | "text_extract";
+  /** Currency of the bounty amount */
+  bounty_currency?: "USD" | "unknown";
+
 }
 
 export type GitHubAuthorAssociation =
