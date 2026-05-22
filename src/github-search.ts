@@ -77,6 +77,8 @@ export function parseGlobalSearchResults(
       created_at: item.createdAt,
       bounty_amount: extractBountyAmount(item.title + " " + item.body),
       bounty_formatted: extractBountyFormatted(item.title) ?? extractBountyFormatted(item.body),
+      bounty_confidence: "text_extract",
+      bounty_currency: "unknown",
     }));
 }
 
