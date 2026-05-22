@@ -49,6 +49,8 @@ describe("parseBossResponse", () => {
     expect(issues[0].number).toBe(42);
     expect(issues[0].bounty_amount).toBe(500);
     expect(issues[0].url).toBe("https://github.com/org/repo/issues/42");
+    expect(issues[0].bounty_confidence).toBe("api");
+    expect(issues[0].bounty_currency).toBe("USD");
   });
 
   it("filters by minimum bounty", () => {
