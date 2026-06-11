@@ -145,3 +145,11 @@ describe("buildBossFilters", () => {
     expect(filters.min_bounty).toBeUndefined();
   });
 });
+
+describe("bounty confidence metadata", () => {
+  it("tags Boss amounts as api-confirmed USD", () => {
+    const issues = parseBossResponse([makeBossItem()]);
+    expect(issues[0].bounty_confidence).toBe("api");
+    expect(issues[0].bounty_currency).toBe("USD");
+  });
+});

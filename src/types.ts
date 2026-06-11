@@ -164,6 +164,11 @@ export interface SeenIssue {
 
 export type BountySourceType = "github" | "github_search" | "boss";
 
+// How trustworthy a bounty_amount is: platform-API-sourced amounts are
+// validated; regex extraction from issue text can misread currencies,
+// discussion mentions, or multiple amounts.
+export type BountyConfidence = "api" | "text_extract";
+
 export interface BountyIssue {
   source: BountySourceType;
   repo: string;
@@ -172,6 +177,8 @@ export interface BountyIssue {
   url: string;
   bounty_amount?: number;
   bounty_formatted?: string;
+  bounty_confidence?: BountyConfidence;
+  bounty_currency?: "USD" | "unknown";
   labels: string[];
   assignees: string[];
   body: string;

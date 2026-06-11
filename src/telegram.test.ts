@@ -106,4 +106,34 @@ describe("formatBountyNotification", () => {
     const result = formatBountyNotification(issue);
     expect(result).toContain("(Global)");
   });
+
+  it("marks text-extracted amounts with a tilde", () => {
+    const issue = makeIssue({
+      bounty_amount: 250,
+      bounty_formatted: "$250",
+      bounty_confidence: "text_extract",
+      bounty_currency: "unknown",
+    });
+    expect(formatBountyNotification(issue)).toContain("~$250");
+  });
+
+  it("shows API-confirmed amounts without a tilde", () => {
+    const issue = makeIssue({
+      source: "boss",
+      bounty_amount: 1000,
+      bounty_formatted: "$1,000",
+      bounty_confidence: "api",
+      bounty_currency: "USD",
+    });
+    const msg = formatBountyNotification(issue);
+    expect(msg).toContain("$1,000");
+    expect(msg).not.toContain("~$1,000");
+  });
+
+  it("shows legacy amounts without confidence metadata untouched", () => {
+    const issue = makeIssue({ bounty_amount: 250, bounty_formatted: "$250" });
+    const msg = formatBountyNotification(issue);
+    expect(msg).toContain("$250");
+    expect(msg).not.toContain("~$250");
+  });
 });

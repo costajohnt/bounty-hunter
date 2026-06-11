@@ -73,20 +73,26 @@ export function parseGlobalSearchResults(
       }
       return true;
     })
-    .map((item) => ({
-      source: "github_search" as const,
-      repo: item.repository.nameWithOwner,
-      number: item.number,
-      title: item.title,
-      url: item.url,
-      labels: item.labels.map((l) => l.name),
-      assignees: item.assignees.map((a) => a.login),
-      body: item.body,
-      comment_count: item.commentsCount,
-      created_at: item.createdAt,
-      bounty_amount: extractBountyAmount(item.title + " " + item.body),
-      bounty_formatted: extractBountyFormatted(item.title) ?? extractBountyFormatted(item.body),
-    }));
+    .map((item) => {
+      const bountyAmount = extractBountyAmount(item.title + " " + item.body);
+      return {
+        source: "github_search" as const,
+        repo: item.repository.nameWithOwner,
+        number: item.number,
+        title: item.title,
+        url: item.url,
+        labels: item.labels.map((l) => l.name),
+        assignees: item.assignees.map((a) => a.login),
+        body: item.body,
+        comment_count: item.commentsCount,
+        created_at: item.createdAt,
+        bounty_amount: bountyAmount,
+        bounty_formatted: extractBountyFormatted(item.title) ?? extractBountyFormatted(item.body),
+        ...(bountyAmount !== undefined
+          ? { bounty_confidence: "text_extract" as const, bounty_currency: "unknown" as const }
+          : {}),
+      };
+    });
 }
 
 export function fetchGlobalBounties(

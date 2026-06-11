@@ -53,20 +53,26 @@ export function fetchRepoIssues(repo: string, labels: string[]): BountyIssue[] {
     commentsCount: number;
   }>;
 
-  return issues.map((issue) => ({
-    source: "github" as const,
-    repo,
-    number: issue.number,
-    title: issue.title,
-    url: issue.url,
-    labels: issue.labels.map((l) => l.name),
-    assignees: issue.assignees.map((a) => a.login),
-    body: issue.body,
-    comment_count: issue.commentsCount,
-    created_at: issue.createdAt,
-    bounty_amount: extractBountyAmount(issue.title + " " + issue.body),
-    bounty_formatted: extractBountyFormatted(issue.title),
-  }));
+  return issues.map((issue) => {
+    const bountyAmount = extractBountyAmount(issue.title + " " + issue.body);
+    return {
+      source: "github" as const,
+      repo,
+      number: issue.number,
+      title: issue.title,
+      url: issue.url,
+      labels: issue.labels.map((l) => l.name),
+      assignees: issue.assignees.map((a) => a.login),
+      body: issue.body,
+      comment_count: issue.commentsCount,
+      created_at: issue.createdAt,
+      bounty_amount: bountyAmount,
+      bounty_formatted: extractBountyFormatted(issue.title),
+      ...(bountyAmount !== undefined
+        ? { bounty_confidence: "text_extract" as const, bounty_currency: "unknown" as const }
+        : {}),
+    };
+  });
 }
 
 export function buildIssueViewArgs(repo: string, number: number): string[] {
