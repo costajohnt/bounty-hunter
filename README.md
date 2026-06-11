@@ -313,7 +313,9 @@ On macOS, it runs as a launchd agent that fires every N minutes (matching your `
 node dist/install-launchd.js install
 ```
 
-This creates a launchd plist at `~/Library/LaunchAgents/com.bounty-hunter.monitor.plist`, loads it immediately, and starts polling. The monitor runs at login and on the configured interval.
+This creates a launchd plist at `~/Library/LaunchAgents/com.bounty-hunter.monitor.plist`, loads it immediately, verifies the job is actually listed, and starts polling. The monitor runs at login and on the configured interval.
+
+The installer validates everything up front and refuses to install when the build is missing, the watchlist config is absent or invalid, or the Telegram credentials are placeholders. launchd jobs do not inherit your shell environment, so the real `bot_token` and `chat_id` must live in `~/.bounty-hunter/watchlist.yml` (set the file to `chmod 600`). The plist pins the absolute Node binary that ran the installer, so version-manager shims and PATH differences cannot break the scheduled runs.
 
 ### Uninstall the Monitor
 
