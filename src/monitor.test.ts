@@ -2,6 +2,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   applyPreFilter,
   applyFreshnessFilter,
+  freshnessDropReason,
+  formatSourceSummary,
+  newDropTally,
   resolveRepoFilters,
   shouldNotify,
 } from "./monitor.js";
@@ -277,5 +280,81 @@ describe("resolveRepoFilters", () => {
     const issue = makeIssue({ labels: ["Help Wanted", "Reviewing"] });
     const resolved = resolveRepoFilters(defaultFilters, { skip_assigned: false });
     expect(applyFreshnessFilter(issue, resolved)).toBe(false);
+  });
+});
+
+describe("freshnessDropReason", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns null for an issue that passes all checks", () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+    expect(freshnessDropReason(makeIssue(), defaultFilters)).toBeNull();
+  });
+
+  it("returns too_old for stale issues", () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-20T00:00:00Z").getTime());
+    expect(freshnessDropReason(makeIssue(), defaultFilters)).toBe("too_old");
+  });
+
+  it("returns assigned for assigned issues", () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+    expect(
+      freshnessDropReason(makeIssue({ assignees: ["someone"] }), defaultFilters)
+    ).toBe("assigned");
+  });
+
+  it("returns claimed_label for claimed issues", () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+    expect(
+      freshnessDropReason(makeIssue({ labels: ["Reviewing"] }), defaultFilters)
+    ).toBe("claimed_label");
+  });
+
+  it("returns too_many_comments at the comment threshold", () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+    expect(
+      freshnessDropReason(makeIssue({ comment_count: 5 }), defaultFilters)
+    ).toBe("too_many_comments");
+  });
+
+  it("keeps applyFreshnessFilter behavior identical", () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+    const passing = makeIssue();
+    const failing = makeIssue({ assignees: ["someone"] });
+    expect(applyFreshnessFilter(passing, defaultFilters)).toBe(true);
+    expect(applyFreshnessFilter(failing, defaultFilters)).toBe(false);
+  });
+});
+
+describe("formatSourceSummary", () => {
+  it("shows fetched and queued counts", () => {
+    const tally = newDropTally();
+    tally.fetched = 3;
+    tally.queued = 3;
+    expect(formatSourceSummary("Expensify/App", tally)).toBe(
+      "Expensify/App: fetched 3, queued 3"
+    );
+  });
+
+  it("lists only nonzero drop reasons", () => {
+    const tally = newDropTally();
+    tally.fetched = 20;
+    tally.assigned = 18;
+    tally.too_many_comments = 2;
+    expect(formatSourceSummary("Expensify/App", tally)).toBe(
+      "Expensify/App: fetched 20, queued 0 (dropped: assigned 18, too_many_comments 2)"
+    );
+  });
+
+  it("counts already-seen and pre-filter drops", () => {
+    const tally = newDropTally();
+    tally.fetched = 5;
+    tally.already_seen = 4;
+    tally.pre_filter = 1;
+    expect(formatSourceSummary("repo", tally)).toBe(
+      "repo: fetched 5, queued 0 (dropped: already_seen 4, pre_filter 1)"
+    );
   });
 });
