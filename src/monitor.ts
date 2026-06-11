@@ -34,27 +34,84 @@ export function resolveRepoFilters(
   return { ...global, ...override };
 }
 
-export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): boolean {
+export type FreshnessDropReason =
+  | "too_old"
+  | "assigned"
+  | "claimed_label"
+  | "too_many_comments";
+
+/**
+ * Returns why the freshness filters drop an issue, or null if it passes.
+ * Surfacing the reason is what makes a 100%-drop source visible in logs.
+ */
+export function freshnessDropReason(
+  issue: BountyIssue,
+  filters: Filters
+): FreshnessDropReason | null {
   if (filters.max_age_days > 0) {
     const ageMs = Date.now() - new Date(issue.created_at).getTime();
     const ageDays = ageMs / (1000 * 60 * 60 * 24);
-    if (ageDays > filters.max_age_days) return false;
+    if (ageDays > filters.max_age_days) return "too_old";
   }
 
   // Boss.dev issues are enriched with real GitHub metadata before filtering,
   // so these checks apply uniformly to every source.
-  if (filters.skip_assigned && issue.assignees.length > 0) return false;
+  if (filters.skip_assigned && issue.assignees.length > 0) return "assigned";
 
   if (filters.claimed_labels.length > 0) {
     const claimedLower = filters.claimed_labels.map((l) => l.toLowerCase());
-    if (issue.labels.some((l) => claimedLower.includes(l.toLowerCase()))) return false;
+    if (issue.labels.some((l) => claimedLower.includes(l.toLowerCase()))) {
+      return "claimed_label";
+    }
   }
 
   if (filters.max_comment_count > 0 && issue.comment_count >= filters.max_comment_count) {
-    return false;
+    return "too_many_comments";
   }
 
-  return true;
+  return null;
+}
+
+export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): boolean {
+  return freshnessDropReason(issue, filters) === null;
+}
+
+export interface DropTally {
+  fetched: number;
+  queued: number;
+  already_seen: number;
+  pre_filter: number;
+  too_old: number;
+  assigned: number;
+  claimed_label: number;
+  too_many_comments: number;
+}
+
+export function newDropTally(): DropTally {
+  return {
+    fetched: 0,
+    queued: 0,
+    already_seen: 0,
+    pre_filter: 0,
+    too_old: 0,
+    assigned: 0,
+    claimed_label: 0,
+    too_many_comments: 0,
+  };
+}
+
+/**
+ * One log line per source per run: how many issues came in, how many were
+ * queued for notification, and where the rest went.
+ */
+export function formatSourceSummary(source: string, tally: DropTally): string {
+  const drops = (
+    ["already_seen", "pre_filter", "too_old", "assigned", "claimed_label", "too_many_comments"] as const
+  )
+    .filter((reason) => tally[reason] > 0)
+    .map((reason) => `${reason} ${tally[reason]}`);
+  const dropped = drops.length ? ` (dropped: ${drops.join(", ")})` : "";
+  return `${source}: fetched ${tally.fetched}, queued ${tally.queued}${dropped}`;
 }
 
 /**
@@ -98,11 +155,24 @@ export async function runMonitor(): Promise<void> {
   for (const repo of config.sources.repos) {
     try {
       const repoFilters = resolveRepoFilters(config.filters, repo.filters);
+      const tally = newDropTally();
       const issues = fetchRepoIssues(repo.name, repo.labels);
+      tally.fetched = issues.length;
       for (const issue of issues) {
-        if (seen.hasSeen(issue.repo, issue.number)) continue;
-        if (!applyPreFilter(issue, repo.pre_filter)) continue;
-        if (!applyFreshnessFilter(issue, repoFilters)) continue;
+        if (seen.hasSeen(issue.repo, issue.number)) {
+          tally.already_seen++;
+          continue;
+        }
+        if (!applyPreFilter(issue, repo.pre_filter)) {
+          tally.pre_filter++;
+          continue;
+        }
+        const dropReason = freshnessDropReason(issue, repoFilters);
+        if (dropReason !== null) {
+          tally[dropReason]++;
+          continue;
+        }
+        tally.queued++;
 
         // Mark seen regardless of vetting outcome to prevent re-checking
         seen.markSeenFromBounty(issue);
@@ -124,6 +194,7 @@ export async function runMonitor(): Promise<void> {
 
         allNew.push({ issue, vetResult });
       }
+      console.log(formatSourceSummary(repo.name, tally));
     } catch (err) {
       console.error(`Error polling ${repo.name}:`, err);
     }
@@ -132,11 +203,21 @@ export async function runMonitor(): Promise<void> {
   // Poll GitHub Global Search
   if (config.sources.github_search?.enabled) {
     try {
+      const tally = newDropTally();
       const watchedRepos = config.sources.repos.map((r) => r.name);
       const bounties = fetchGlobalBounties(config.sources.github_search, watchedRepos);
+      tally.fetched = bounties.length;
       for (const issue of bounties) {
-        if (seen.hasSeen(issue.repo, issue.number)) continue;
-        if (!applyFreshnessFilter(issue, config.filters)) continue;
+        if (seen.hasSeen(issue.repo, issue.number)) {
+          tally.already_seen++;
+          continue;
+        }
+        const dropReason = freshnessDropReason(issue, config.filters);
+        if (dropReason !== null) {
+          tally[dropReason]++;
+          continue;
+        }
+        tally.queued++;
 
         seen.markSeenFromBounty(issue);
 
@@ -155,6 +236,7 @@ export async function runMonitor(): Promise<void> {
 
         allNew.push({ issue, vetResult });
       }
+      console.log(formatSourceSummary("github_search", tally));
     } catch (err) {
       console.error("Error polling GitHub Global Search:", err);
     }
@@ -163,9 +245,14 @@ export async function runMonitor(): Promise<void> {
   // Poll Boss.dev
   if (config.sources.boss?.enabled) {
     try {
+      const tally = newDropTally();
       const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));
+      tally.fetched = bounties.length;
       for (const issue of bounties) {
-        if (seen.hasSeen(issue.repo, issue.number)) continue;
+        if (seen.hasSeen(issue.repo, issue.number)) {
+          tally.already_seen++;
+          continue;
+        }
 
         // Enrich with GitHub metadata (real dates, labels, assignees, body)
         try {
@@ -182,7 +269,12 @@ export async function runMonitor(): Promise<void> {
           );
         }
 
-        if (!applyFreshnessFilter(issue, config.filters)) continue;
+        const dropReason = freshnessDropReason(issue, config.filters);
+        if (dropReason !== null) {
+          tally[dropReason]++;
+          continue;
+        }
+        tally.queued++;
 
         seen.markSeenFromBounty(issue);
 
@@ -201,6 +293,7 @@ export async function runMonitor(): Promise<void> {
 
         allNew.push({ issue, vetResult });
       }
+      console.log(formatSourceSummary("boss.dev", tally));
     } catch (err) {
       console.error("Error polling Boss.dev:", err);
     }
