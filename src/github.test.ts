@@ -90,7 +90,8 @@ describe("buildIssueMetadataArgs", () => {
     expect(jsonFields).toContain("labels");
     expect(jsonFields).toContain("assignees");
     expect(jsonFields).toContain("createdAt");
-    expect(jsonFields).toContain("commentsCount");
+    expect(jsonFields).toContain("comments");
+    expect(jsonFields).not.toContain("commentsCount");
   });
 
   it("uses --repo flag for the repo", () => {
@@ -108,12 +109,19 @@ describe("buildIssueMetadataArgs", () => {
 
 describe("fetchIssueMetadata", () => {
   it("parses GitHub API response into IssueMetadata", async () => {
+    // gh issue view --json has no commentsCount field; comments is an array
     const mockResponse = JSON.stringify({
       body: "Fix the login bug",
       labels: [{ name: "bug" }, { name: "Help Wanted" }],
       assignees: [{ login: "alice" }, { login: "bob" }],
       createdAt: "2025-01-15T10:00:00Z",
-      commentsCount: 5,
+      comments: [
+        { author: { login: "carol" }, body: "first" },
+        { author: { login: "dave" }, body: "second" },
+        { author: { login: "carol" }, body: "third" },
+        { author: { login: "erin" }, body: "fourth" },
+        { author: { login: "frank" }, body: "fifth" },
+      ],
     });
 
     mockExecFileSync.mockReturnValue(mockResponse);
@@ -144,7 +152,7 @@ describe("fetchIssueMetadata", () => {
       labels: [],
       assignees: [],
       createdAt: "2025-06-01T00:00:00Z",
-      commentsCount: 0,
+      comments: [],
     });
 
     mockExecFileSync.mockReturnValue(mockResponse);

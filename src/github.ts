@@ -113,7 +113,8 @@ export function buildIssueMetadataArgs(repo: string, number: number): string[] {
     "--repo",
     repo,
     "--json",
-    "body,labels,assignees,createdAt,commentsCount",
+    // gh issue view has no commentsCount field; comments is an array
+    "body,labels,assignees,createdAt,comments",
   ];
 }
 
@@ -128,13 +129,13 @@ export function fetchIssueMetadata(
     labels: Array<{ name: string }>;
     assignees: Array<{ login: string }>;
     createdAt: string;
-    commentsCount: number;
+    comments: unknown[];
   };
   return {
     body: data.body,
     labels: data.labels.map((l) => l.name),
     assignees: data.assignees.map((a) => a.login),
-    comment_count: data.commentsCount,
+    comment_count: data.comments.length,
     created_at: data.createdAt,
   };
 }
