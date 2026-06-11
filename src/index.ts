@@ -6,7 +6,7 @@ import { fetchGlobalBounties } from "./github-search.js";
 import { fetchBossBounties, buildBossFilters } from "./boss.js";
 import { SeenStore, effectiveRetentionDays } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
-import { applyPreFilter, applyFreshnessFilter } from "./monitor.js";
+import { applyPreFilter, applyFreshnessFilter, resolveRepoFilters } from "./monitor.js";
 import { vetIssue } from "./vet.js";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -36,6 +36,7 @@ async function main() {
       const seenThisScan = new Set<string>();
 
       for (const repo of config.sources.repos) {
+        const repoFilters = resolveRepoFilters(config.filters, repo.filters);
         let issues: BountyIssue[];
         try {
           issues = fetchRepoIssues(repo.name, repo.labels);
@@ -48,7 +49,7 @@ async function main() {
           if (seenThisScan.has(issueKey)) continue;
           seenThisScan.add(issueKey);
           if (!applyPreFilter(issue, repo.pre_filter)) continue;
-          if (!applyFreshnessFilter(issue, config.filters)) continue;
+          if (!applyFreshnessFilter(issue, repoFilters)) continue;
 
           let vetResult: VetResult | undefined;
           if (vettingEnabled) {

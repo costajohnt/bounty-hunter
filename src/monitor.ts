@@ -10,6 +10,7 @@ import { vetIssue } from "./vet.js";
 import type {
   BountyIssue,
   Filters,
+  FiltersOverride,
   RepoSource,
   VetResult,
   VettingConfig,
@@ -19,6 +20,18 @@ export function applyPreFilter(issue: BountyIssue, filter: RepoSource["pre_filte
   if (!filter?.keywords_exclude?.length) return true;
   const text = (issue.title + " " + issue.body).toLowerCase();
   return !filter.keywords_exclude.some((kw) => text.includes(kw.toLowerCase()));
+}
+
+/**
+ * Merges a repo's filter overrides onto the global filters. Only keys the
+ * repo explicitly sets are overridden; everything else stays global.
+ */
+export function resolveRepoFilters(
+  global: Filters,
+  override: FiltersOverride | undefined
+): Filters {
+  if (!override) return global;
+  return { ...global, ...override };
 }
 
 export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): boolean {
@@ -84,11 +97,12 @@ export async function runMonitor(): Promise<void> {
   // Poll GitHub repos
   for (const repo of config.sources.repos) {
     try {
+      const repoFilters = resolveRepoFilters(config.filters, repo.filters);
       const issues = fetchRepoIssues(repo.name, repo.labels);
       for (const issue of issues) {
         if (seen.hasSeen(issue.repo, issue.number)) continue;
         if (!applyPreFilter(issue, repo.pre_filter)) continue;
-        if (!applyFreshnessFilter(issue, config.filters)) continue;
+        if (!applyFreshnessFilter(issue, repoFilters)) continue;
 
         // Mark seen regardless of vetting outcome to prevent re-checking
         seen.markSeenFromBounty(issue);
