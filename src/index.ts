@@ -4,7 +4,7 @@ import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
 import { fetchRepoIssues, fetchIssueComments, fetchIssueMetadata } from "./github.js";
 import { fetchGlobalBounties } from "./github-search.js";
 import { fetchBossBounties, buildBossFilters } from "./boss.js";
-import { SeenStore } from "./seen.js";
+import { SeenStore, effectiveRetentionDays } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { applyPreFilter, applyFreshnessFilter } from "./monitor.js";
 import { vetIssue } from "./vet.js";
@@ -27,7 +27,10 @@ async function main() {
       const config = loadConfig();
       const dataDir = getDataDir();
       ensureDataDir(dataDir);
-      const seen = new SeenStore(join(dataDir, "seen.json"));
+      const seen = new SeenStore(
+        join(dataDir, "seen.json"),
+        effectiveRetentionDays(config.seen_retention_days, config.filters.max_age_days)
+      );
       const vettingEnabled = config.vetting.enabled;
       const allIssues: ScanResult[] = [];
       const seenThisScan = new Set<string>();
@@ -207,7 +210,7 @@ async function main() {
     case "seen": {
       const dataDir = getDataDir();
       ensureDataDir(dataDir);
-      const seen = new SeenStore(join(dataDir, "seen.json"));
+      const seen = new SeenStore(join(dataDir, "seen.json")); // manual state tool: never prunes
       if (args[1] === "--add") {
         const idArg = args[2] ?? "";
         const hashIdx = idArg.lastIndexOf("#");

@@ -4,7 +4,7 @@ import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
 import { fetchRepoIssues, fetchIssueComments, fetchIssueMetadata } from "./github.js";
 import { fetchGlobalBounties } from "./github-search.js";
 import { fetchBossBounties, buildBossFilters } from "./boss.js";
-import { SeenStore } from "./seen.js";
+import { SeenStore, effectiveRetentionDays } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { vetIssue } from "./vet.js";
 import type {
@@ -73,7 +73,10 @@ export async function runMonitor(): Promise<void> {
   const config = loadConfig();
   const dataDir = getDataDir();
   ensureDataDir(dataDir);
-  const seen = new SeenStore(join(dataDir, "seen.json"));
+  const seen = new SeenStore(
+    join(dataDir, "seen.json"),
+    effectiveRetentionDays(config.seen_retention_days, config.filters.max_age_days)
+  );
   const vettingEnabled = config.vetting.enabled;
 
   const allNew: Array<{ issue: BountyIssue; vetResult?: VetResult }> = [];
