@@ -85,6 +85,12 @@ sources:
   boss:
     enabled: true              # Set to false to disable Boss.dev polling
     min_bounty: 50             # Minimum bounty amount in USD (0 = no minimum)
+    # Boss's catalog is mostly standing bounties older than the global
+    # max_age_days, so without this override the source never notifies.
+    # seen.json still dedups, so each standing bounty surfaces exactly once
+    # (expect a one-time burst on the first run).
+    filters:
+      max_age_days: 0
 
   # GitHub Global Label Search — searches ALL of GitHub for bounty-labeled issues
   # This discovers bounties beyond your watched repos. Defaults are
