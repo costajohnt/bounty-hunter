@@ -5,6 +5,7 @@ import { fetchRepoIssues, fetchIssueComments, fetchIssueMetadata } from "./githu
 import { fetchGlobalBounties } from "./github-search.js";
 import { fetchBossBounties, buildBossFilters } from "./boss.js";
 import { SeenStore, effectiveRetentionDays } from "./seen.js";
+import { HealthStore, FAILURE_ALERT_THRESHOLD } from "./health.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { vetIssue } from "./vet.js";
 import type {
@@ -14,6 +15,7 @@ import type {
   RepoSource,
   VetResult,
   VettingConfig,
+  WatchlistConfig,
 } from "./types.js";
 
 export function applyPreFilter(issue: BountyIssue, filter: RepoSource["pre_filter"]): boolean {
@@ -139,6 +141,24 @@ export function shouldNotify(
   }
 }
 
+/**
+ * Best-effort Telegram alert: a failed alert send must never crash a run.
+ * Returns whether the alert was actually delivered so callers can retry
+ * next run instead of treating an attempt as delivery.
+ */
+async function sendAlert(
+  telegram: WatchlistConfig["telegram"],
+  text: string
+): Promise<boolean> {
+  try {
+    await sendTelegramMessage(telegram, `⚠️ ${text}`);
+    return true;
+  } catch (err) {
+    console.error("Failed to send alert:", err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
 export async function runMonitor(): Promise<void> {
   const config = loadConfig();
   const dataDir = getDataDir();
@@ -147,6 +167,7 @@ export async function runMonitor(): Promise<void> {
     join(dataDir, "seen.json"),
     effectiveRetentionDays(config.seen_retention_days, config.filters.max_age_days)
   );
+  const health = new HealthStore(join(dataDir, "health.json"));
   const vettingEnabled = config.vetting.enabled;
 
   const allNew: Array<{ issue: BountyIssue; vetResult?: VetResult }> = [];
@@ -195,8 +216,17 @@ export async function runMonitor(): Promise<void> {
         allNew.push({ issue, vetResult });
       }
       console.log(formatSourceSummary(repo.name, tally));
+      health.recordSourceSuccess(repo.name, tally.fetched);
     } catch (err) {
       console.error(`Error polling ${repo.name}:`, err);
+      if (health.recordSourceFailure(repo.name)) {
+        const delivered = await sendAlert(
+          config.telegram,
+          `bounty-hunter: source ${repo.name} has failed ${FAILURE_ALERT_THRESHOLD}+ runs in a row. ` +
+            `Last error: ${err instanceof Error ? err.message : err}`
+        );
+        if (delivered) health.markFailureAlerted(repo.name);
+      }
     }
   }
 
@@ -237,8 +267,17 @@ export async function runMonitor(): Promise<void> {
         allNew.push({ issue, vetResult });
       }
       console.log(formatSourceSummary("github_search", tally));
+      health.recordSourceSuccess("github_search", tally.fetched);
     } catch (err) {
       console.error("Error polling GitHub Global Search:", err);
+      if (health.recordSourceFailure("github_search")) {
+        const delivered = await sendAlert(
+          config.telegram,
+          `bounty-hunter: source github_search has failed ${FAILURE_ALERT_THRESHOLD}+ runs in a row. ` +
+            `Last error: ${err instanceof Error ? err.message : err}`
+        );
+        if (delivered) health.markFailureAlerted("github_search");
+      }
     }
   }
 
@@ -294,40 +333,75 @@ export async function runMonitor(): Promise<void> {
         allNew.push({ issue, vetResult });
       }
       console.log(formatSourceSummary("boss.dev", tally));
+      health.recordSourceSuccess("boss.dev", tally.fetched);
     } catch (err) {
       console.error("Error polling Boss.dev:", err);
+      if (health.recordSourceFailure("boss.dev")) {
+        const delivered = await sendAlert(
+          config.telegram,
+          `bounty-hunter: source boss.dev has failed ${FAILURE_ALERT_THRESHOLD}+ runs in a row. ` +
+            `Last error: ${err instanceof Error ? err.message : err}`
+        );
+        if (delivered) health.markFailureAlerted("boss.dev");
+      }
     }
   }
+
+  health.recordScan(allNew.length);
 
   // Notify
   if (allNew.length === 0) {
     console.log(`[${new Date().toISOString()}] No new bounties found.`);
-    return;
+  } else {
+    console.log(`[${new Date().toISOString()}] Found ${allNew.length} new bounties!`);
+
+    for (const { issue, vetResult } of allNew) {
+      if (!shouldNotify(vetResult, config.vetting.on_fail)) {
+        console.log(`  Skipped (vetting): ${issue.repo}#${issue.number} — ${vetResult?.summary}`);
+        continue;
+      }
+
+      try {
+        const message = formatBountyNotification(issue, vetResult);
+        await sendTelegramMessage(config.telegram, message);
+        console.log(`  Notified: ${issue.repo}#${issue.number}`);
+      } catch (err) {
+        console.error(`  Failed to notify ${issue.repo}#${issue.number}:`, err);
+      }
+    }
   }
 
-  console.log(`[${new Date().toISOString()}] Found ${allNew.length} new bounties!`);
-
-  for (const { issue, vetResult } of allNew) {
-    if (!shouldNotify(vetResult, config.vetting.on_fail)) {
-      console.log(`  Skipped (vetting): ${issue.repo}#${issue.number} — ${vetResult?.summary}`);
-      continue;
-    }
-
+  // Heartbeat: counters reset only after the send actually succeeds, so a
+  // Telegram outage delays the heartbeat instead of eating it
+  if (health.heartbeatDue(config.heartbeat_hours)) {
     try {
-      const message = formatBountyNotification(issue, vetResult);
-      await sendTelegramMessage(config.telegram, message);
-      console.log(`  Notified: ${issue.repo}#${issue.number}`);
+      await sendTelegramMessage(config.telegram, health.buildHeartbeatMessage());
     } catch (err) {
-      console.error(`  Failed to notify ${issue.repo}#${issue.number}:`, err);
+      console.error("Failed to send heartbeat:", err instanceof Error ? err.message : err);
+      return;
     }
+    // save() is best-effort, so marking cannot throw after a delivered send
+    health.markHeartbeatSent();
+    console.log("Heartbeat sent.");
   }
 }
 
 // Entry point when run directly
 const isMain = fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isMain) {
-  runMonitor().catch((err) => {
+  runMonitor().catch(async (err) => {
     console.error(err);
+    // Best effort: tell Telegram the monitor itself crashed. Config load may
+    // be the very thing that failed, so guard everything.
+    try {
+      const config = loadConfig();
+      await sendAlert(
+        config.telegram,
+        `bounty-hunter: monitor run crashed: ${err instanceof Error ? err.message : err}`
+      );
+    } catch {
+      // No usable config; the console error above is all we can do
+    }
     process.exit(1);
   });
 }

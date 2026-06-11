@@ -120,6 +120,8 @@ export const WatchlistConfigSchema = z.object({
   polling_interval: z.number(),
   // Days to keep seen.json entries before pruning on load (0 = never prune)
   seen_retention_days: z.number().int().nonnegative().default(90),
+  // Hours between Telegram heartbeat messages (0 = disabled)
+  heartbeat_hours: z.number().int().nonnegative().default(24),
   telegram: TelegramConfigSchema,
   sources: z.object({
     repos: z.array(RepoSourceSchema),

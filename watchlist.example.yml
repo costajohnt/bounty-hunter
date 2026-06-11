@@ -11,6 +11,13 @@ polling_interval: 15
 # re-notify while still inside the freshness window.
 seen_retention_days: 90
 
+# Hours between Telegram heartbeat messages (0 = disabled). The heartbeat
+# reports scans/bounties since the last one and flags failing or dry sources,
+# so the monitor can never die silently. Note: disabling it also disables the
+# periodic reminder about sources stuck in a failure streak; the one-time
+# streak alert still fires.
+heartbeat_hours: 24
+
 telegram:
   bot_token: "set-via-env"
   chat_id: "set-via-env"

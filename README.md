@@ -205,6 +205,8 @@ sources:
 | Field | Description |
 |---|---|
 | `polling_interval` | How often the background monitor checks for new issues, in minutes |
+| `seen_retention_days` | Days to keep seen.json entries before pruning on load (default `90`, `0` = never) |
+| `heartbeat_hours` | Hours between Telegram heartbeat messages (default `24`, `0` = disabled). Reports scans and queued bounties since the last heartbeat and flags failing or dry sources. A source failing 3 runs in a row also triggers an immediate alert |
 | `telegram.bot_token` | Token from @BotFather |
 | `telegram.chat_id` | Your Telegram chat ID (the setup wizard helps you find this) |
 | `sources.repos[].name` | GitHub repo in `owner/repo` format |
