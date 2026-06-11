@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+      - run: npm run build
+
+      # integration.test.ts hits live APIs (gh search, Boss.dev) and depends on
+      # external state; excluded here until it is mock-based (issue 15).
+      - run: npx vitest run --exclude "**/integration.test.ts"
