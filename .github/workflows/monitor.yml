@@ -1,10 +1,12 @@
+# Manual smoke test only. Scheduled monitoring runs via launchd on a local
+# Mac (see README "Background Monitor"); a GitHub Actions cron is the wrong
+# host because GitHub auto-disables schedules after 60 days of repo
+# inactivity, which silently killed monitoring from 2026-04-23 onward, and
+# the run below uses the example watchlist rather than a real one.
 name: Bounty Monitor
 
 on:
-  schedule:
-    # Every 15 minutes
-    - cron: "*/15 * * * *"
-  workflow_dispatch: # Allow manual triggers
+  workflow_dispatch: # Manual smoke-test runs only
 
 jobs:
   monitor:
