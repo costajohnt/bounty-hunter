@@ -305,7 +305,7 @@ bounty-hunter config
 
 The background monitor is a standalone Node.js script that runs without AI. It polls GitHub and Boss.dev on a timer, checks for new issues against the seen store, and sends Telegram notifications for anything new.
 
-On macOS, it runs as a launchd agent that fires every N minutes (matching your `polling_interval` setting).
+On macOS, it runs as a launchd agent that fires every N minutes (matching your `polling_interval` setting). launchd is the only supported scheduler: a GitHub Actions cron was tried and abandoned because GitHub silently disables scheduled workflows after 60 days of repo inactivity, which is fatal for a monitor that should outlive active development (the repo's `Bounty Monitor` workflow remains as a manual smoke test only).
 
 ### Install the Monitor
 
