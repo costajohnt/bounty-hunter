@@ -1,10 +1,42 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 
 const TEST_DIR = "/tmp/bounty-hunter-integration";
-const REAL_HOME = process.env.HOME ?? "";
+
+// A fake `gh` executable placed first on PATH for the spawned CLI. The CLI
+// runs as a child process, so vi.mock can't reach its gh calls; intercepting
+// the binary keeps this a real end-to-end test (argv parsing, config load,
+// filter pipeline, JSON output) while staying deterministic and offline.
+function writeGhShim(searchFixture: unknown, commentsFixture: unknown): void {
+  const binDir = join(TEST_DIR, "bin");
+  mkdirSync(binDir, { recursive: true });
+  const shim = `#!/bin/sh
+case "$1" in
+  search)
+    cat <<'JSON'
+${JSON.stringify(searchFixture)}
+JSON
+    ;;
+  issue)
+    cat <<'JSON'
+${JSON.stringify(commentsFixture)}
+JSON
+    ;;
+  auth)
+    exit 0
+    ;;
+  *)
+    echo "gh shim: unexpected command: $@" >&2
+    exit 1
+    ;;
+esac
+`;
+  const shimPath = join(binDir, "gh");
+  writeFileSync(shimPath, shim);
+  chmodSync(shimPath, 0o755);
+}
 
 describe("CLI integration", () => {
   beforeEach(() => {
@@ -28,8 +60,38 @@ sources:
     min_bounty: 50
     languages: []
     keywords_exclude: []
+  boss:
+    enabled: false
 `;
     writeFileSync(join(dataDir, "watchlist.yml"), config);
+
+    // One day old: inside the 7-day freshness window on every run
+    const createdAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    writeGhShim(
+      [
+        {
+          number: 81500,
+          title: "[$250] Modal does not close on escape key",
+          url: "https://github.com/Expensify/App/issues/81500",
+          createdAt,
+          labels: [{ name: "Help Wanted" }, { name: "Bug" }],
+          body: "Reproduction: open any modal and press escape.",
+          commentsCount: 2,
+          assignees: [],
+        },
+      ],
+      {
+        comments: [
+          {
+            author: { login: "alice" },
+            authorAssociation: "NONE",
+            body: "I can reproduce this on staging-free local setup.",
+            createdAt,
+            url: "https://github.com/Expensify/App/issues/81500#issuecomment-1",
+          },
+        ],
+      }
+    );
   });
 
   afterEach(() => {
@@ -37,31 +99,62 @@ sources:
   });
 
   it("scan command returns JSON output", () => {
-    // Skip in CI if gh is not available
-    try {
-      execFileSync("gh", ["auth", "status"], { stdio: "ignore" });
-    } catch {
-      return;
-    }
-
-    const result = execFileSync(
-      "node",
-      ["dist/index.js", "scan", "--json"],
-      {
-        encoding: "utf-8",
-        cwd: join(import.meta.dirname ?? ".", ".."),
-        env: {
-          ...process.env,
-          HOME: TEST_DIR,
-          GH_CONFIG_DIR: join(REAL_HOME, ".config", "gh"),
-        },
-      }
-    );
+    const result = execFileSync("node", ["dist/index.js", "scan", "--json"], {
+      encoding: "utf-8",
+      cwd: join(import.meta.dirname ?? ".", ".."),
+      env: {
+        ...process.env,
+        HOME: TEST_DIR,
+        PATH: `${join(TEST_DIR, "bin")}:${process.env.PATH ?? ""}`,
+      },
+    });
     const issues = JSON.parse(result);
     expect(Array.isArray(issues)).toBe(true);
-    expect(issues.length).toBeGreaterThan(0);
-    expect(issues[0]).toHaveProperty("repo");
-    expect(issues[0]).toHaveProperty("title");
-    expect(issues[0]).toHaveProperty("url");
+    expect(issues).toHaveLength(1);
+
+    const issue = issues[0];
+    expect(issue.repo).toBe("Expensify/App");
+    expect(issue.number).toBe(81500);
+    expect(issue.title).toBe("[$250] Modal does not close on escape key");
+    expect(issue.url).toBe("https://github.com/Expensify/App/issues/81500");
+    expect(issue.source).toBe("github");
+    expect(issue.bounty_amount).toBe(250);
+    expect(issue.is_new).toBe(true);
+    // Vetting ran against the shimmed comments and passed
+    expect(issue.vetResult?.passed).toBe(true);
+  });
+
+  it("scan command respects the freshness filter", () => {
+    // Regenerate the shim with a stale issue (30 days old, window is 7)
+    const staleCreatedAt = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000
+    ).toISOString();
+    writeGhShim(
+      [
+        {
+          number: 81501,
+          title: "[$250] Old issue outside the freshness window",
+          url: "https://github.com/Expensify/App/issues/81501",
+          createdAt: staleCreatedAt,
+          labels: [{ name: "Help Wanted" }],
+          body: "Stale.",
+          commentsCount: 0,
+          assignees: [],
+        },
+      ],
+      { comments: [] }
+    );
+
+    const result = execFileSync("node", ["dist/index.js", "scan", "--json"], {
+      encoding: "utf-8",
+      cwd: join(import.meta.dirname ?? ".", ".."),
+      env: {
+        ...process.env,
+        HOME: TEST_DIR,
+        PATH: `${join(TEST_DIR, "bin")}:${process.env.PATH ?? ""}`,
+      },
+    });
+    const issues = JSON.parse(result);
+    expect(issues).toHaveLength(0);
   });
 });
