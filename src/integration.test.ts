@@ -60,6 +60,22 @@ sources:
 `;
     writeFileSync(join(dataDir, "watchlist.yml"), config);
 
+    // Seed a seen entry older than the 90-day retention default. The prune
+    // fires during scan and must log to stderr, keeping --json stdout parseable.
+    writeFileSync(
+      join(dataDir, "seen.json"),
+      JSON.stringify([
+        {
+          id: "Expensify/App#1",
+          repo: "Expensify/App",
+          number: 1,
+          title: "Ancient seen entry",
+          seen_at: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+          skipped: false,
+        },
+      ])
+    );
+
     // One day old: inside the 7-day freshness window on every run
     const createdAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     writeGhShim(

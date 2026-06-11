@@ -6,6 +6,11 @@
 
 polling_interval: 15
 
+# Days to keep seen.json entries before pruning on load (0 = never prune).
+# Pruning is floored at filters.max_age_days so a pruned issue can never
+# re-notify while still inside the freshness window.
+seen_retention_days: 90
+
 telegram:
   bot_token: "set-via-env"
   chat_id: "set-via-env"
