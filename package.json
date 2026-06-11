@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "pretest": "npm run build",
     "test": "vitest",
     "monitor": "node dist/monitor.js"
   },
