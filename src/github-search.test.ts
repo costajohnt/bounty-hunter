@@ -194,3 +194,19 @@ describe("parseGlobalSearchResults", () => {
     expect(issues).toHaveLength(1);
   });
 });
+
+describe("bounty confidence metadata", () => {
+  it("tags extracted amounts as text_extract with unknown currency", () => {
+    const issues = parseGlobalSearchResults(mockSearchResult(), defaultConfig);
+    expect(issues[0].bounty_confidence).toBe("text_extract");
+    expect(issues[0].bounty_currency).toBe("unknown");
+  });
+
+  it("omits confidence metadata when no amount was extracted", () => {
+    const raw = mockSearchResult({ title: "Fix the bug", body: "no amount here" });
+    const issues = parseGlobalSearchResults(raw, defaultConfig);
+    expect(issues[0].bounty_amount).toBeUndefined();
+    expect(issues[0].bounty_confidence).toBeUndefined();
+    expect(issues[0].bounty_currency).toBeUndefined();
+  });
+});

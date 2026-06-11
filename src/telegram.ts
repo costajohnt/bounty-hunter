@@ -7,7 +7,9 @@ export function formatBountyNotification(
   vetResult?: VetResult
 ): string {
   const source = issue.source === "github_search" ? " (Global)" : issue.source === "boss" ? " (Boss)" : "";
-  const bounty = issue.bounty_formatted ? ` — ${issue.bounty_formatted}` : "";
+  // Tilde marks regex-extracted amounts that no platform API has confirmed
+  const unverified = issue.bounty_confidence === "text_extract" ? "~" : "";
+  const bounty = issue.bounty_formatted ? ` — ${unverified}${issue.bounty_formatted}` : "";
   const labels = issue.labels.length
     ? `\nLabels: ${issue.labels.join(", ")}`
     : "";
