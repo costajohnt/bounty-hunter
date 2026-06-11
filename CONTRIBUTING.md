@@ -31,7 +31,7 @@ You need Node.js 20+ and the GitHub CLI (`gh`) authenticated for integration tes
 Use clear, imperative commit messages:
 
 ```
-add algora API pagination support
+add boss.dev API pagination support
 fix telegram notification escaping
 refactor config loader to use yaml.parse
 ```
@@ -48,7 +48,7 @@ This is a **TypeScript ESM** project (`"type": "module"` in package.json).
   ```
 - Target is ES2022 with strict mode enabled.
 - Use `execFileSync` (or `execFile`) with array arguments for all subprocess calls. Never use `execSync` or `exec`.
-- Keep modules focused. Each source file in `src/` covers a single concern (GitHub client, Algora client, Telegram client, config, monitor, etc.).
+- Keep modules focused. Each source file in `src/` covers a single concern (GitHub client, Boss.dev client, Telegram client, config, monitor, etc.).
 
 ## Testing
 
@@ -90,7 +90,7 @@ These rules are non-negotiable:
 
 ## Pull Requests
 
-- **Branch naming:** descriptive kebab-case (`add-algora-pagination`, `fix-telegram-escaping`).
+- **Branch naming:** descriptive kebab-case (`add-boss-pagination`, `fix-telegram-escaping`).
 - **PR description:** explain what changed and why. Include test output if relevant.
 - **Tests must pass.** PRs with failing tests will not be reviewed.
 - **Squash merge preferred.** Keep `main` history clean.
@@ -102,7 +102,6 @@ These rules are non-negotiable:
 src/                 TypeScript CLI source
   index.ts           CLI entry point
   github.ts          GitHub API client (uses gh CLI)
-  algora.ts          Algora bounty API client
   telegram.ts        Telegram notification client
   config.ts          Watchlist config loader (~/.bounty-hunter/watchlist.yml)
   monitor.ts         Background polling logic (no AI, just API calls)

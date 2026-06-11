@@ -37,7 +37,7 @@ If `~/.bounty-hunter/watchlist.yml` does not exist, enter setup mode:
    to get their chat_id
 4. Ask which repos to watch (defaults: Expensify/App, tenstorrent/tt-mlir)
 5. For each repo, ask which labels to monitor
-6. Ask if they want to enable Algora (default: yes)
+6. Ask if they want to enable Boss.dev (default: yes)
 7. If yes, ask for minimum bounty amount (default: $50)
 8. Write the config to `~/.bounty-hunter/watchlist.yml`
 9. Create the data directories: `~/.bounty-hunter/{proposals,clones,templates}`

@@ -2,7 +2,6 @@
 
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
 import { fetchRepoIssues, fetchIssueComments, fetchIssueMetadata } from "./github.js";
-import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { fetchGlobalBounties } from "./github-search.js";
 import { fetchBossBounties, buildBossFilters } from "./boss.js";
 import { SeenStore } from "./seen.js";
@@ -66,31 +65,6 @@ async function main() {
             is_new: !seen.hasSeen(issue.repo, issue.number),
             ...(vetResult ? { vetResult } : {}),
           });
-        }
-      }
-
-      if (config.sources.algora?.enabled) {
-        try {
-          const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
-          for (const issue of bounties) {
-            const issueKey = `${issue.repo}#${issue.number}`;
-            if (seenThisScan.has(issueKey)) continue;
-            seenThisScan.add(issueKey);
-            if (!applyFreshnessFilter(issue, config.filters)) continue;
-
-            let vetResult: VetResult | undefined;
-            if (vettingEnabled) {
-              vetResult = vetIssue(issue, [], config.vetting);
-            }
-
-            allIssues.push({
-              ...issue,
-              is_new: !seen.hasSeen(issue.repo, issue.number),
-              ...(vetResult ? { vetResult } : {}),
-            });
-          }
-        } catch (err) {
-          console.error("Error fetching Algora bounties:", err instanceof Error ? err.message : err);
         }
       }
 

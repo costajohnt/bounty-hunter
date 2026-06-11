@@ -30,25 +30,6 @@ describe("formatBountyNotification", () => {
     expect(msg).toContain("\ud83c\udfaf");
   });
 
-  it("formats an Algora bounty issue", () => {
-    const issue = makeIssue({
-      source: "algora",
-      repo: "coolify/coolify",
-      number: 8154,
-      title: "Add Debian 13 support",
-      url: "https://github.com/coolify/coolify/issues/8154",
-      bounty_amount: 6900,
-      bounty_formatted: "$6,900",
-      labels: [],
-      body: "",
-      comment_count: 0,
-      tech: ["php", "vue"],
-    });
-    const msg = formatBountyNotification(issue);
-    expect(msg).toContain("$6,900");
-    expect(msg).toContain("Algora");
-  });
-
   it("shows checkmark and OK for passed vetting", () => {
     const vetResult: VetResult = {
       passed: true,

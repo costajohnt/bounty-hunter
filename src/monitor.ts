@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 import { resolve, join } from "node:path";
 import { loadConfig, ensureDataDir, getDataDir } from "./config.js";
 import { fetchRepoIssues, fetchIssueComments, fetchIssueMetadata } from "./github.js";
-import { fetchAlgoraBounties, buildAlgoraFilters } from "./algora.js";
 import { fetchGlobalBounties } from "./github-search.js";
 import { fetchBossBounties, buildBossFilters } from "./boss.js";
 import { SeenStore } from "./seen.js";
@@ -23,27 +22,23 @@ export function applyPreFilter(issue: BountyIssue, filter: RepoSource["pre_filte
 }
 
 export function applyFreshnessFilter(issue: BountyIssue, filters: Filters): boolean {
-  // Age check (both sources)
   if (filters.max_age_days > 0) {
     const ageMs = Date.now() - new Date(issue.created_at).getTime();
     const ageDays = ageMs / (1000 * 60 * 60 * 24);
     if (ageDays > filters.max_age_days) return false;
   }
 
-  // Algora handles claiming at the API level and hardcodes
-  // assignees/labels/comment_count to empty/zero, so skip these checks.
-  // Boss.dev issues are enriched with real GitHub metadata before filtering.
-  if (issue.source !== "algora") {
-    if (filters.skip_assigned && issue.assignees.length > 0) return false;
+  // Boss.dev issues are enriched with real GitHub metadata before filtering,
+  // so these checks apply uniformly to every source.
+  if (filters.skip_assigned && issue.assignees.length > 0) return false;
 
-    if (filters.claimed_labels.length > 0) {
-      const claimedLower = filters.claimed_labels.map((l) => l.toLowerCase());
-      if (issue.labels.some((l) => claimedLower.includes(l.toLowerCase()))) return false;
-    }
+  if (filters.claimed_labels.length > 0) {
+    const claimedLower = filters.claimed_labels.map((l) => l.toLowerCase());
+    if (issue.labels.some((l) => claimedLower.includes(l.toLowerCase()))) return false;
+  }
 
-    if (filters.max_comment_count > 0 && issue.comment_count >= filters.max_comment_count) {
-      return false;
-    }
+  if (filters.max_comment_count > 0 && issue.comment_count >= filters.max_comment_count) {
+    return false;
   }
 
   return true;
@@ -114,29 +109,6 @@ export async function runMonitor(): Promise<void> {
       }
     } catch (err) {
       console.error(`Error polling ${repo.name}:`, err);
-    }
-  }
-
-  // Poll Algora
-  if (config.sources.algora?.enabled) {
-    try {
-      const bounties = await fetchAlgoraBounties(buildAlgoraFilters(config.sources.algora));
-      for (const issue of bounties) {
-        if (seen.hasSeen(issue.repo, issue.number)) continue;
-        if (!applyFreshnessFilter(issue, config.filters)) continue;
-
-        seen.markSeenFromBounty(issue);
-
-        // Vet Algora issues with empty comments (body-based checks still apply)
-        let vetResult: VetResult | undefined;
-        if (vettingEnabled) {
-          vetResult = vetIssue(issue, [], config.vetting);
-        }
-
-        allNew.push({ issue, vetResult });
-      }
-    } catch (err) {
-      console.error("Error polling Algora:", err);
     }
   }
 

@@ -79,11 +79,6 @@ describe("applyFreshnessFilter", () => {
       expect(applyFreshnessFilter(issue, { ...defaultFilters, max_age_days: 0 })).toBe(true);
     });
 
-    it("applies age check to Algora issues", () => {
-      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-20T00:00:00Z").getTime());
-      const issue = makeIssue({ source: "algora", created_at: "2026-02-01T00:00:00Z" });
-      expect(applyFreshnessFilter(issue, defaultFilters)).toBe(false);
-    });
   });
 
   describe("assignee filtering", () => {
@@ -99,11 +94,6 @@ describe("applyFreshnessFilter", () => {
       expect(applyFreshnessFilter(issue, { ...defaultFilters, skip_assigned: false })).toBe(true);
     });
 
-    it("skips assignee check for Algora issues", () => {
-      vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
-      const issue = makeIssue({ source: "algora", assignees: ["someone"] });
-      expect(applyFreshnessFilter(issue, defaultFilters)).toBe(true);
-    });
   });
 
   describe("claimed label filtering", () => {

@@ -149,15 +149,14 @@ export function checkCompetition(
 
 /**
  * Checks that the issue actually has a confirmed bounty (amount or label).
- * Always passes for Algora issues (bounties are confirmed by the platform).
+ * Always passes for Boss.dev issues (bounties are confirmed by the platform).
  */
 export function checkBountyConfirmation(
   issue: BountyIssue,
   requireLabel: boolean,
   labels: string[]
 ): VetSignal {
-  // Algora and Boss.dev issues have platform-confirmed bounties
-  if (issue.source === "algora" || issue.source === "boss") {
+  if (issue.source === "boss") {
     return { name: "bounty_confirmation", passed: true, detail: "Platform-confirmed bounty" };
   }
 

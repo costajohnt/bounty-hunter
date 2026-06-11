@@ -28,15 +28,14 @@ sources:
   algora:
     enabled: true
     min_bounty: 50
-    languages: []
-    keywords_exclude: []
 `;
     writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
     const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
     expect(config.polling_interval).toBe(5);
     expect(config.sources.repos).toHaveLength(1);
     expect(config.sources.repos[0].name).toBe("Expensify/App");
-    expect(config.sources.algora.enabled).toBe(true);
+    // Legacy algora blocks are stripped, not rejected (source removed; zod drops unknown keys)
+    expect("algora" in config.sources).toBe(false);
     expect(config.telegram.bot_token).toBe("test-token");
   });
 
@@ -62,11 +61,6 @@ telegram:
   chat_id: "yaml-chat"
 sources:
   repos: []
-  algora:
-    enabled: false
-    min_bounty: 0
-    languages: []
-    keywords_exclude: []
 `;
     writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
     process.env.TELEGRAM_BOT_TOKEN = "env-token";
@@ -99,11 +93,6 @@ telegram:
   chat_id: "12345"
 sources:
   repos: []
-  algora:
-    enabled: false
-    min_bounty: 0
-    languages: []
-    keywords_exclude: []
 `;
     writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
     const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
@@ -125,11 +114,6 @@ filters:
   skip_assigned: false
 sources:
   repos: []
-  algora:
-    enabled: false
-    min_bounty: 0
-    languages: []
-    keywords_exclude: []
 `;
     writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
     const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
@@ -158,11 +142,6 @@ telegram:
   chat_id: "12345"
 sources:
   repos: []
-  algora:
-    enabled: false
-    min_bounty: 0
-    languages: []
-    keywords_exclude: []
 `;
     writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
     const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
@@ -185,11 +164,6 @@ vetting:
   max_proposals: 5
 sources:
   repos: []
-  algora:
-    enabled: false
-    min_bounty: 0
-    languages: []
-    keywords_exclude: []
 `;
     writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
     const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
@@ -210,11 +184,6 @@ vetting:
   on_fail: "invalid_value"
 sources:
   repos: []
-  algora:
-    enabled: false
-    min_bounty: 0
-    languages: []
-    keywords_exclude: []
 `;
     writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
     expect(() => loadConfig(join(TEST_DIR, "watchlist.yml"))).toThrow();

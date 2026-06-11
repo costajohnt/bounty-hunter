@@ -60,12 +60,6 @@ sources:
         keywords_exclude:
           - "NewDot"
 
-  algora:
-    enabled: true
-    min_bounty: 50
-    languages: []
-    keywords_exclude: []
-
   # Boss.dev — bounties for open source software
   # https://boss.dev — small catalog but platform-confirmed bounties,
   # currently the most reliable source
