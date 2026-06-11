@@ -219,6 +219,8 @@ sources:
 | `sources.algora.min_bounty` | Minimum bounty amount in USD (Algora amounts are in cents internally) |
 | `sources.algora.languages` | Only match bounties tagged with these languages (empty = all) |
 | `sources.algora.keywords_exclude` | Skip Algora bounties containing these keywords |
+| `sources.boss.enabled` | Whether to poll Boss.dev for bounties (default `true`; currently the most reliable source) |
+| `sources.boss.min_bounty` | Minimum bounty amount in USD (0 = no minimum) |
 
 ### Telegram Setup
 

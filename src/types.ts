@@ -31,7 +31,8 @@ export const GitHubSearchSourceSchema = z.object({
 });
 
 export const BossSourceSchema = z.object({
-  enabled: z.boolean().default(false),
+  // Enabled by default: Boss.dev is currently the most reliable bounty source
+  enabled: z.boolean().default(true),
   min_bounty: z.number().default(0),
 });
 
