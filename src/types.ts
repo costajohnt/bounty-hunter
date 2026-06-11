@@ -45,6 +45,11 @@ export const BossSourceSchema = z.object({
   // Enabled by default: Boss.dev is currently the most reliable bounty source
   enabled: z.boolean().default(true),
   min_bounty: z.number().default(0),
+  // Per-source overrides of the global filters block. Boss's catalog is
+  // mostly standing bounties older than any reasonable max_age_days, so
+  // without max_age_days: 0 here the source never notifies at all (seen.json
+  // still dedups, so each standing bounty surfaces exactly once).
+  filters: FiltersOverrideSchema.optional(),
 });
 
 const TelegramConfigSchema = z.object({

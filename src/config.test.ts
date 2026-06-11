@@ -123,6 +123,43 @@ sources:
     expect(config.filters.max_comment_count).toBe(5);
     expect(config.filters.claimed_labels).toContain("Reviewing");
   });
+
+  it("accepts per-source filter overrides on the boss block", () => {
+    const yml = `
+polling_interval: 5
+telegram:
+  bot_token: "test-token"
+  chat_id: "12345"
+sources:
+  repos: []
+  boss:
+    enabled: true
+    min_bounty: 50
+    filters:
+      max_age_days: 0
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
+    expect(config.sources.boss?.filters?.max_age_days).toBe(0);
+    // Only the overridden key is present; merging happens at poll time
+    expect(config.sources.boss?.filters?.skip_assigned).toBeUndefined();
+  });
+
+  it("boss block without filters has no override", () => {
+    const yml = `
+polling_interval: 5
+telegram:
+  bot_token: "test-token"
+  chat_id: "12345"
+sources:
+  repos: []
+  boss:
+    enabled: true
+`;
+    writeFileSync(join(TEST_DIR, "watchlist.yml"), yml);
+    const config = loadConfig(join(TEST_DIR, "watchlist.yml"));
+    expect(config.sources.boss?.filters).toBeUndefined();
+  });
 });
 
 describe("vetting config defaults", () => {

@@ -285,6 +285,7 @@ export async function runMonitor(): Promise<void> {
   if (config.sources.boss?.enabled) {
     try {
       const tally = newDropTally();
+      const bossFilters = resolveRepoFilters(config.filters, config.sources.boss.filters);
       const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));
       tally.fetched = bounties.length;
       for (const issue of bounties) {
@@ -308,7 +309,7 @@ export async function runMonitor(): Promise<void> {
           );
         }
 
-        const dropReason = freshnessDropReason(issue, config.filters);
+        const dropReason = freshnessDropReason(issue, bossFilters);
         if (dropReason !== null) {
           tally[dropReason]++;
           continue;

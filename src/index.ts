@@ -109,6 +109,7 @@ async function main() {
 
       // Poll Boss.dev
       if (config.sources.boss?.enabled) {
+        const bossFilters = resolveRepoFilters(config.filters, config.sources.boss.filters);
         try {
           const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));
           for (const issue of bounties) {
@@ -131,7 +132,7 @@ async function main() {
               );
             }
 
-            if (!applyFreshnessFilter(issue, config.filters)) continue;
+            if (!applyFreshnessFilter(issue, bossFilters)) continue;
 
             let vetResult: VetResult | undefined;
             if (vettingEnabled) {
