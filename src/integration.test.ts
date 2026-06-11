@@ -55,11 +55,6 @@ sources:
     - name: Expensify/App
       labels: ["Help Wanted"]
       proposal_template: expensify
-  algora:
-    enabled: false
-    min_bounty: 50
-    languages: []
-    keywords_exclude: []
   boss:
     enabled: false
 `;

@@ -364,17 +364,6 @@ describe("checkCompetition", () => {
 // --- Bounty Confirmation ---
 
 describe("checkBountyConfirmation", () => {
-  it("always passes for Algora issues", () => {
-    const issue = makeIssue({
-      source: "algora",
-      bounty_amount: undefined,
-      labels: [],
-    });
-    const result = checkBountyConfirmation(issue, true, ["Help Wanted"]);
-    expect(result.passed).toBe(true);
-    expect(result.detail).toContain("Platform-confirmed");
-  });
-
   it("always passes for Boss.dev issues", () => {
     const issue = makeIssue({
       source: "boss",

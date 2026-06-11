@@ -1,6 +1,6 @@
 # Bounty Hunter
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that monitors GitHub repos and [Algora](https://algora.io) for open bounty issues, sends Telegram push notifications when new bounties appear, and provides an interactive `/claim` workflow to investigate codebases and draft proposals with AI assistance.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that monitors GitHub repos, GitHub global search, and [Boss.dev](https://boss.dev) for open bounty issues, sends Telegram push notifications when new bounties appear, and provides an interactive `/claim` workflow to investigate codebases and draft proposals with AI assistance.
 
 ## Table of Contents
 
@@ -61,11 +61,9 @@ sources:
       labels: ["Help Wanted"]
       proposal_template: expensify
 
-  algora:
+  boss:
     enabled: true
     min_bounty: 50
-    languages: []
-    keywords_exclude: []
 EOF
 ```
 
@@ -107,7 +105,7 @@ Bounty Hunter attacks both bottlenecks. A lightweight background monitor polls y
 
 The plugin operates in two distinct modes:
 
-**Background monitoring (no AI):** A standalone Node.js script runs on a timer via macOS launchd. It polls GitHub (via `gh` CLI) and the Algora tRPC API for issues matching your watchlist criteria, deduplicates against previously seen issues, and sends Telegram notifications for anything new.
+**Background monitoring (no AI):** A standalone Node.js script runs on a timer via macOS launchd. It polls GitHub (via `gh` CLI) and the Boss.dev API for issues matching your watchlist criteria, deduplicates against previously seen issues, and sends Telegram notifications for anything new.
 
 **Interactive claiming (AI-assisted):** When you run `/claim <issue-url>` inside Claude Code, the plugin fetches the full issue, assesses competition from existing proposals, clones or updates the repository, launches an investigation agent to explore the codebase, drafts a proposal using the appropriate template, and presents it for your review before posting.
 
@@ -168,7 +166,7 @@ All state is stored in `~/.bounty-hunter/`:
 
 ```
 ~/.bounty-hunter/
-  watchlist.yml     # Your configuration (repos, labels, Telegram, Algora)
+  watchlist.yml     # Your configuration (repos, labels, Telegram, sources)
   seen.json         # Deduplication store for already-seen issues
   proposals/        # Saved proposal drafts
   clones/           # Shallow repo clones (cached)
@@ -197,11 +195,9 @@ sources:
       labels: ["bounty"]
       proposal_template: auto
 
-  algora:
+  boss:
     enabled: true
     min_bounty: 50        # USD, filters out small bounties
-    languages: []          # empty = all languages
-    keywords_exclude: []   # exclude issues containing these terms
 ```
 
 ### Configuration Fields
@@ -215,10 +211,6 @@ sources:
 | `sources.repos[].labels` | Only match issues with these labels |
 | `sources.repos[].proposal_template` | Which template to use: `expensify`, `default`, or `auto` |
 | `sources.repos[].pre_filter.keywords_exclude` | Skip issues whose title or body contains these keywords |
-| `sources.algora.enabled` | Whether to poll Algora for bounties |
-| `sources.algora.min_bounty` | Minimum bounty amount in USD (Algora amounts are in cents internally) |
-| `sources.algora.languages` | Only match bounties tagged with these languages (empty = all) |
-| `sources.algora.keywords_exclude` | Skip Algora bounties containing these keywords |
 | `sources.boss.enabled` | Whether to poll Boss.dev for bounties (default `true`; currently the most reliable source) |
 | `sources.boss.min_bounty` | Minimum bounty amount in USD (0 = no minimum) |
 
@@ -278,7 +270,7 @@ View, modify, or test your watchlist configuration:
 /watchlist test         # Run a test scan without marking anything as seen
 ```
 
-On first run (when no config file exists), `/watchlist` enters an interactive setup wizard that walks you through Telegram bot creation, repo selection, label configuration, and Algora settings.
+On first run (when no config file exists), `/watchlist` enters an interactive setup wizard that walks you through Telegram bot creation, repo selection, label configuration, and source settings.
 
 ### CLI Commands
 
@@ -304,7 +296,7 @@ bounty-hunter config
 
 ## Background Monitor
 
-The background monitor is a standalone Node.js script that runs without AI. It polls GitHub and Algora on a timer, checks for new issues against the seen store, and sends Telegram notifications for anything new.
+The background monitor is a standalone Node.js script that runs without AI. It polls GitHub and Boss.dev on a timer, checks for new issues against the seen store, and sends Telegram notifications for anything new.
 
 On macOS, it runs as a launchd agent that fires every N minutes (matching your `polling_interval` setting).
 
@@ -386,7 +378,6 @@ bounty-hunter/
 │   ├── config.ts              # YAML config loader, data directory management
 │   ├── seen.ts                # SeenStore — JSON-backed deduplication
 │   ├── github.ts              # GitHub issue fetcher (wraps gh CLI via execFileSync)
-│   ├── algora.ts              # Algora tRPC client (public API, no auth needed)
 │   ├── telegram.ts            # Telegram Bot API (send messages, get updates)
 │   ├── monitor.ts             # Background polling loop + pre-filter logic
 │   ├── index.ts               # CLI entry point (scan, notify, post-comment, seen, config)
@@ -408,7 +399,6 @@ bounty-hunter/
 - **`execFileSync` over `execSync`:** All subprocess calls use `execFileSync` with array arguments to prevent shell injection.
 - **No AI in the monitor:** The background process does zero AI inference. It is pure API polling and notification logic. This keeps it fast, cheap, and predictable.
 - **Shallow clones:** Repos are cloned with `--depth 50` and cached in `~/.bounty-hunter/clones/`. Subsequent runs fetch and checkout rather than re-cloning.
-- **Algora amounts in cents:** The Algora API returns bounty amounts in cents. The plugin converts to dollars for display and filtering.
 
 ## Development
 
@@ -429,7 +419,7 @@ npm run dev         # Watch mode — recompiles on file changes
 
 ### Test
 
-The test suite includes 22 tests across 7 test files covering config loading, seen store persistence, pre-filter logic, GitHub argument building, Algora response parsing, Telegram formatting, and CLI integration.
+The test suite covers config loading, seen store persistence, pre-filter logic, GitHub argument building, Boss.dev response parsing, Telegram formatting, and CLI integration.
 
 ```bash
 npx vitest run      # Run all tests once

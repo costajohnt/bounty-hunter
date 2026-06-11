@@ -1,7 +1,7 @@
 {
   "name": "bounty-hunter",
   "version": "0.1.0",
-  "description": "Monitor GitHub repos and Algora for bounty issues, get Telegram alerts, and draft proposals with AI-assisted codebase investigation",
+  "description": "Monitor GitHub repos, GitHub global search, and Boss.dev for bounty issues, get Telegram alerts, and draft proposals with AI-assisted codebase investigation",
   "author": {
     "name": "John Costa"
   },

@@ -14,7 +14,7 @@
 
 ## Project Overview
 
-Claude Code plugin that monitors GitHub repos, Algora, GitHub Global Search, and Boss.dev for open bounty issues, sends Telegram notifications, and provides an AI-assisted `/claim` workflow to investigate codebases and draft proposals.
+Claude Code plugin that monitors GitHub repos, GitHub Global Search, and Boss.dev for open bounty issues, sends Telegram notifications, and provides an AI-assisted `/claim` workflow to investigate codebases and draft proposals.
 
 Two modes of operation:
 - **Background monitor** (no AI): standalone Node.js script run by launchd, polls APIs on a timer
@@ -28,7 +28,6 @@ Two modes of operation:
 - **yaml** package for config parsing (only runtime dependency)
 - **GitHub CLI (`gh`)** for GitHub API access (no token management needed)
 - **Telegram Bot API** for notifications
-- **Algora tRPC API** for bounty discovery (public, no auth)
 - **macOS launchd** for background scheduling
 
 ## Project Setup
@@ -49,7 +48,6 @@ src/
   github.ts              GitHub issue fetcher + comment fetcher (wraps gh CLI via execFileSync)
   github-search.ts       GitHub Global Search — search all of GitHub for bounty-labeled issues
   boss.ts                  Boss.dev API client (public API, USD amounts)
-  algora.ts              Algora tRPC client (public API, amounts in cents)
   telegram.ts            Telegram Bot API client (send messages, get updates, vet-enriched notifications)
   vet.ts                 Issue vetting — rule-based checks (access, competition, bounty, platform)
   monitor.ts             Background polling loop + pre-filter + vetting integration
@@ -77,7 +75,6 @@ templates/
 - **AI only runs interactively** when user triggers `/claim`
 - **All imports use `.js` extensions** (ESM requirement): `import { foo } from "./bar.js"`
 - **ESM entry point guard**: `fileURLToPath(import.meta.url) === resolve(process.argv[1])`
-- **Algora amounts are in cents** — divide by 100 for display/filtering
 - **SeenStore uses composite IDs**: `repo#number` format (e.g., `Expensify/App#81500`)
 
 ## Security Rules
@@ -89,10 +86,9 @@ templates/
 
 ## Core Types (src/types.ts)
 
-- `BountyIssue` — normalized issue from GitHub, Algora, GitHub Global Search, or Boss.dev (source: "github" | "algora" | "github_search" | "boss")
+- `BountyIssue` — normalized issue from GitHub, GitHub Global Search, or Boss.dev (source: "github" | "github_search" | "boss")
 - `WatchlistConfig` — top-level config shape (polling_interval, telegram, sources, filters, vetting)
 - `RepoSource` — individual GitHub repo config (name, labels, proposal_template, pre_filter)
-- `AlgoraSource` — Algora config (enabled, min_bounty, languages, keywords_exclude)
 - `GitHubSearchSource` — GitHub Global Search config (enabled, labels, languages, min_stars, keywords_exclude, max_results)
 - `BossSource` — Boss.dev config (enabled, min_bounty)
 - `SeenIssue` — deduplication record (id, repo, number, title, seen_at, skipped)
@@ -107,11 +103,10 @@ templates/
 1. `config.ts` loads `~/.bounty-hunter/watchlist.yml` → `WatchlistConfig`
 2. `monitor.ts` iterates repos: `fetchRepoIssues()` → `applyPreFilter()` → `applyFreshnessFilter()` → `seen.markSeenFromBounty()`
 3. `monitor.ts` vets survivors: `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
-4. `monitor.ts` polls Algora: `fetchAlgoraBounties(buildAlgoraFilters())` → freshness → vet (body-only, no comments)
-4.5. `monitor.ts` polls GitHub Global Search: `fetchGlobalBounties()` → dedup watched repos → `applyFreshnessFilter()` → `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
-4.6. `monitor.ts` polls Boss.dev: `fetchBossBounties(buildBossFilters())` → `fetchIssueMetadata()` (enrich) → freshness → `fetchIssueComments()` → `vetIssue()`
-4.7. `index.ts` scan uses in-memory `Set<string>` for cross-source dedup within a single run
-5. New issues → `formatBountyNotification(issue, vetResult?)` → `sendTelegramMessage()`
+4. `monitor.ts` polls GitHub Global Search: `fetchGlobalBounties()` → dedup watched repos → `applyFreshnessFilter()` → `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
+5. `monitor.ts` polls Boss.dev: `fetchBossBounties(buildBossFilters())` → `fetchIssueMetadata()` (enrich) → freshness → `fetchIssueComments()` → `vetIssue()`
+6. `index.ts` scan uses in-memory `Set<string>` for cross-source dedup within a single run
+7. New issues → `formatBountyNotification(issue, vetResult?)` → `sendTelegramMessage()`
 
 ## Testing
 

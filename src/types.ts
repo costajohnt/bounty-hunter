@@ -13,14 +13,6 @@ const RepoSourceSchema = z.object({
     .optional(),
 });
 
-const AlgoraSourceSchema = z.object({
-  enabled: z.boolean(),
-  min_bounty: z.number(),
-  languages: z.array(z.string()),
-  keywords_exclude: z.array(z.string()),
-  max_pages: z.number().default(3),
-});
-
 export const GitHubSearchSourceSchema = z.object({
   enabled: z.boolean().default(false),
   labels: z.array(z.string()).default(["bounty"]),
@@ -110,7 +102,6 @@ export const WatchlistConfigSchema = z.object({
   telegram: TelegramConfigSchema,
   sources: z.object({
     repos: z.array(RepoSourceSchema),
-    algora: AlgoraSourceSchema,
     github_search: GitHubSearchSourceSchema.optional(),
     boss: BossSourceSchema.optional(),
   }),
@@ -132,7 +123,6 @@ export const WatchlistConfigSchema = z.object({
 
 // Derive types from schemas
 export type RepoSource = z.infer<typeof RepoSourceSchema>;
-export type AlgoraSource = z.infer<typeof AlgoraSourceSchema>;
 export type GitHubSearchSource = z.infer<typeof GitHubSearchSourceSchema>;
 export type BossSource = z.infer<typeof BossSourceSchema>;
 export type TelegramConfig = z.infer<typeof TelegramConfigSchema>;
@@ -151,7 +141,7 @@ export interface SeenIssue {
   skipped: boolean;
 }
 
-export type BountySourceType = "github" | "algora" | "github_search" | "boss";
+export type BountySourceType = "github" | "github_search" | "boss";
 
 export interface BountyIssue {
   source: BountySourceType;
