@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { generatePlist } from "./install-launchd.js";
-import { mkdirSync, rmSync } from "node:fs";
+import { generatePlist, validateInstallPreconditions } from "./install-launchd.js";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const TEST_HOME = "/tmp/bounty-hunter-test-launchd";
 
@@ -43,5 +44,107 @@ describe("generatePlist", () => {
     expect(plist).toContain("&gt;");
     expect(plist).not.toContain("<special>");
     expect(plist).not.toContain("&chars>");
+  });
+
+  it("uses the absolute node binary instead of a bare PATH lookup", () => {
+    const plist = generatePlist("/path/monitor.js", 300);
+    expect(plist).toContain(`<string>${process.execPath}</string>`);
+    expect(plist).not.toContain("<string>node</string>");
+  });
+
+  it("accepts an explicit node path", () => {
+    const plist = generatePlist("/path/monitor.js", 300, "/custom/node");
+    expect(plist).toContain("<string>/custom/node</string>");
+  });
+});
+
+describe("validateInstallPreconditions", () => {
+  let originalHome: string | undefined;
+  const scriptPath = join(TEST_HOME, "monitor.js");
+
+  function writeConfig(botToken: string, chatId: string): void {
+    const dataDir = join(TEST_HOME, ".bounty-hunter");
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(
+      join(dataDir, "watchlist.yml"),
+      `
+polling_interval: 5
+telegram:
+  bot_token: "${botToken}"
+  chat_id: "${chatId}"
+sources:
+  repos: []
+`
+    );
+  }
+
+  beforeEach(() => {
+    originalHome = process.env.HOME;
+    process.env.HOME = TEST_HOME;
+    mkdirSync(TEST_HOME, { recursive: true });
+    writeFileSync(scriptPath, "// compiled monitor");
+  });
+
+  afterEach(() => {
+    process.env.HOME = originalHome;
+    rmSync(TEST_HOME, { recursive: true, force: true });
+  });
+
+  it("passes with a real config and existing script", () => {
+    writeConfig("123456:real-token", "987654");
+    const config = validateInstallPreconditions(scriptPath);
+    expect(config.polling_interval).toBe(5);
+  });
+
+  it("rejects a missing monitor script with build guidance", () => {
+    writeConfig("123456:real-token", "987654");
+    expect(() => validateInstallPreconditions(join(TEST_HOME, "nope.js"))).toThrow(
+      /npm run build/
+    );
+  });
+
+  it("rejects a missing config before touching anything", () => {
+    expect(() => validateInstallPreconditions(scriptPath)).toThrow(/watchlist/);
+  });
+
+  it("rejects placeholder telegram credentials", () => {
+    writeConfig("set-via-env", "set-via-env");
+    expect(() => validateInstallPreconditions(scriptPath)).toThrow(
+      /do not inherit/
+    );
+  });
+
+  it("rejects empty telegram credentials", () => {
+    writeConfig("", "987654");
+    expect(() => validateInstallPreconditions(scriptPath)).toThrow(
+      /do not inherit/
+    );
+  });
+
+  it("rejects placeholder YAML even when TELEGRAM_* env vars are exported", () => {
+    // The installer's shell env never reaches the launchd job, so exported
+    // tokens must not mask a placeholder config (loadConfig overlays them)
+    writeConfig("set-via-env", "set-via-env");
+    const prevToken = process.env.TELEGRAM_BOT_TOKEN;
+    const prevChat = process.env.TELEGRAM_CHAT_ID;
+    process.env.TELEGRAM_BOT_TOKEN = "123456:real-token-from-shell";
+    process.env.TELEGRAM_CHAT_ID = "987654";
+    try {
+      expect(() => validateInstallPreconditions(scriptPath)).toThrow(
+        /do not inherit/
+      );
+    } finally {
+      if (prevToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+      else process.env.TELEGRAM_BOT_TOKEN = prevToken;
+      if (prevChat === undefined) delete process.env.TELEGRAM_CHAT_ID;
+      else process.env.TELEGRAM_CHAT_ID = prevChat;
+    }
+  });
+
+  it("rejects whitespace-only credentials", () => {
+    writeConfig("   ", "987654");
+    expect(() => validateInstallPreconditions(scriptPath)).toThrow(
+      /do not inherit/
+    );
   });
 });
