@@ -211,6 +211,7 @@ sources:
 | `sources.repos[].labels` | Only match issues with these labels |
 | `sources.repos[].proposal_template` | Which template to use: `expensify`, `default`, or `auto` |
 | `sources.repos[].pre_filter.keywords_exclude` | Skip issues whose title or body contains these keywords |
+| `sources.repos[].filters` | Per-repo overrides of the global `filters` block (`max_age_days`, `skip_assigned`, `claimed_labels`, `max_comment_count`). Needed for repos like Expensify/App that auto-assign and bot-comment on every issue, which the global defaults would drop entirely |
 | `sources.boss.enabled` | Whether to poll Boss.dev for bounties (default `true`; currently the most reliable source) |
 | `sources.boss.min_bounty` | Minimum bounty amount in USD (0 = no minimum) |
 

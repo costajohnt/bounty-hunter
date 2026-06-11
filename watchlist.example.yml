@@ -64,6 +64,13 @@ sources:
       pre_filter:
         keywords_exclude:
           - "NewDot"
+      # Expensify auto-assigns an internal engineer to every external issue
+      # and bot comments arrive within minutes, so the global skip_assigned /
+      # max_comment_count defaults would drop 100% of its bounties. Override
+      # them here; vetting's max_proposals still gauges real competition.
+      filters:
+        skip_assigned: false
+        max_comment_count: 0
 
   # Boss.dev — bounties for open source software
   # https://boss.dev — small catalog but platform-confirmed bounties,

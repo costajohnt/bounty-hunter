@@ -2,6 +2,15 @@ import { z } from "zod";
 
 // --- Config schemas (Zod = single source of truth) ---
 
+const FiltersOverrideSchema = z
+  .object({
+    max_age_days: z.number(),
+    claimed_labels: z.array(z.string()),
+    max_comment_count: z.number(),
+    skip_assigned: z.boolean(),
+  })
+  .partial();
+
 const RepoSourceSchema = z.object({
   name: z.string(),
   labels: z.array(z.string()),
@@ -11,7 +20,13 @@ const RepoSourceSchema = z.object({
       keywords_exclude: z.array(z.string()).optional(),
     })
     .optional(),
+  // Per-repo overrides of the global filters block. Repos like Expensify/App
+  // auto-assign an engineer and accumulate bot comments within minutes, so
+  // the global skip_assigned / max_comment_count defaults drop everything.
+  filters: FiltersOverrideSchema.optional(),
 });
+
+export type FiltersOverride = z.infer<typeof FiltersOverrideSchema>;
 
 export const GitHubSearchSourceSchema = z.object({
   enabled: z.boolean().default(false),

@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { applyPreFilter, applyFreshnessFilter, shouldNotify } from "./monitor.js";
+import {
+  applyPreFilter,
+  applyFreshnessFilter,
+  resolveRepoFilters,
+  shouldNotify,
+} from "./monitor.js";
 import type { BountyIssue, Filters, VetResult } from "./types.js";
 
 const makeIssue = (overrides: Partial<BountyIssue> = {}): BountyIssue => ({
@@ -229,5 +234,48 @@ describe("shouldNotify", () => {
   it("notifies on failed vetting with on_fail=notify_all", () => {
     const failed = makeVetResult(false);
     expect(shouldNotify(failed, "notify_all")).toBe(true);
+  });
+});
+
+describe("resolveRepoFilters", () => {
+  it("returns global filters when no override is given", () => {
+    expect(resolveRepoFilters(defaultFilters, undefined)).toEqual(defaultFilters);
+  });
+
+  it("applies only the overridden keys", () => {
+    const resolved = resolveRepoFilters(defaultFilters, {
+      skip_assigned: false,
+      max_comment_count: 0,
+    });
+    expect(resolved.skip_assigned).toBe(false);
+    expect(resolved.max_comment_count).toBe(0);
+    expect(resolved.max_age_days).toBe(defaultFilters.max_age_days);
+    expect(resolved.claimed_labels).toEqual(defaultFilters.claimed_labels);
+  });
+
+  it("does not mutate the global filters object", () => {
+    const global = { ...defaultFilters };
+    resolveRepoFilters(global, { skip_assigned: false });
+    expect(global.skip_assigned).toBe(true);
+  });
+
+  it("lets an Expensify-style issue pass with assignee and comment overrides", () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+    // The shape that previously dropped 100% of Expensify bounties:
+    // auto-assigned internal engineer plus an instant bot comment storm
+    const issue = makeIssue({ assignees: ["internal-engineer"], comment_count: 26 });
+    expect(applyFreshnessFilter(issue, defaultFilters)).toBe(false);
+    const resolved = resolveRepoFilters(defaultFilters, {
+      skip_assigned: false,
+      max_comment_count: 0,
+    });
+    expect(applyFreshnessFilter(issue, resolved)).toBe(true);
+  });
+
+  it("still applies claimed-label drops under overrides", () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-02-06T00:00:00Z").getTime());
+    const issue = makeIssue({ labels: ["Help Wanted", "Reviewing"] });
+    const resolved = resolveRepoFilters(defaultFilters, { skip_assigned: false });
+    expect(applyFreshnessFilter(issue, resolved)).toBe(false);
   });
 });
