@@ -89,7 +89,7 @@ templates/
 - `BountyIssue` — normalized issue from GitHub, GitHub Global Search, or Boss.dev (source: "github" | "github_search" | "boss")
 - `WatchlistConfig` — top-level config shape (polling_interval, telegram, sources, filters, vetting)
 - `RepoSource` — individual GitHub repo config (name, labels, proposal_template, pre_filter)
-- `GitHubSearchSource` — GitHub Global Search config (enabled, labels, languages, min_stars, keywords_exclude, max_results)
+- `GitHubSearchSource` — GitHub Global Search config (enabled, labels, languages, min_stars, keywords_exclude, repos_exclude, require_bounty_amount, max_results)
 - `BossSource` — Boss.dev config (enabled, min_bounty)
 - `SeenIssue` — deduplication record (id, repo, number, title, seen_at, skipped)
 - `TelegramConfig` — bot_token + chat_id

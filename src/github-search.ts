@@ -56,11 +56,20 @@ export function parseGlobalSearchResults(
       if (watchedRepos?.includes(item.repository.nameWithOwner)) {
         return false;
       }
+      if (config.repos_exclude.includes(item.repository.nameWithOwner)) {
+        return false;
+      }
       if (config.keywords_exclude.length > 0) {
         const text = (item.title + " " + item.body).toLowerCase();
         if (config.keywords_exclude.some((kw) => text.includes(kw.toLowerCase()))) {
           return false;
         }
+      }
+      if (
+        config.require_bounty_amount &&
+        extractBountyAmount(item.title + " " + item.body) === undefined
+      ) {
+        return false;
       }
       return true;
     })

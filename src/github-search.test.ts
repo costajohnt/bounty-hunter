@@ -8,6 +8,8 @@ const defaultConfig: GitHubSearchSource = {
   languages: [],
   min_stars: 0,
   keywords_exclude: [],
+  repos_exclude: [],
+  require_bounty_amount: false,
   max_results: 50,
 };
 
@@ -104,6 +106,32 @@ describe("parseGlobalSearchResults", () => {
     const raw = mockSearchResult({ repository: { nameWithOwner: "small/repo", stargazerCount: 10 } });
     const issues = parseGlobalSearchResults(raw, config);
     expect(issues).toHaveLength(0);
+  });
+
+  it("filters by repos_exclude blocklist", () => {
+    const config = { ...defaultConfig, repos_exclude: ["waxeye7/screeps-bounty-arena"] };
+    const raw = mockSearchResult({
+      repository: { nameWithOwner: "waxeye7/screeps-bounty-arena", stargazerCount: 999 },
+    });
+    expect(parseGlobalSearchResults(raw, config)).toHaveLength(0);
+    // Non-blocked repos still pass
+    expect(parseGlobalSearchResults(mockSearchResult(), config)).toHaveLength(1);
+  });
+
+  it("drops issues without a detected dollar amount when require_bounty_amount is set", () => {
+    const config = { ...defaultConfig, require_bounty_amount: true };
+    const noAmount = mockSearchResult({ title: "bug-hunt: find the regression", body: "no payout mentioned" });
+    expect(parseGlobalSearchResults(noAmount, config)).toHaveLength(0);
+    // Amount in title passes
+    expect(parseGlobalSearchResults(mockSearchResult(), config)).toHaveLength(1);
+    // Amount only in body passes too
+    const bodyAmount = mockSearchResult({ title: "Fix the bug", body: "Bounty: $250 on completion" });
+    expect(parseGlobalSearchResults(bodyAmount, config)).toHaveLength(1);
+  });
+
+  it("keeps issues without amounts when require_bounty_amount is off", () => {
+    const noAmount = mockSearchResult({ title: "bug-hunt: find the regression", body: "no payout" });
+    expect(parseGlobalSearchResults(noAmount, defaultConfig)).toHaveLength(1);
   });
 
   it("filters by keywords_exclude in title", () => {

@@ -214,6 +214,10 @@ sources:
 | `sources.repos[].filters` | Per-repo overrides of the global `filters` block (`max_age_days`, `skip_assigned`, `claimed_labels`, `max_comment_count`). Needed for repos like Expensify/App that auto-assign and bot-comment on every issue, which the global defaults would drop entirely |
 | `sources.boss.enabled` | Whether to poll Boss.dev for bounties (default `true`; currently the most reliable source) |
 | `sources.boss.min_bounty` | Minimum bounty amount in USD (0 = no minimum) |
+| `sources.github_search.enabled` | Whether to search all of GitHub for bounty-labeled issues (default `false`) |
+| `sources.github_search.min_stars` | Only include repos with at least N stars (default `200`; bounty-farm repos dominate below that) |
+| `sources.github_search.repos_exclude` | Blocklist of `owner/repo` to always skip |
+| `sources.github_search.require_bounty_amount` | Drop issues with no detected `$` amount in title or body (default `true`) |
 
 ### Telegram Setup
 
