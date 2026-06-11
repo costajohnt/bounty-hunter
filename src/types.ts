@@ -32,8 +32,12 @@ export const GitHubSearchSourceSchema = z.object({
   enabled: z.boolean().default(false),
   labels: z.array(z.string()).default(["bounty"]),
   languages: z.array(z.string()).default([]),
-  min_stars: z.number().default(0),
+  // Precision-first defaults: global search sweeps all of GitHub, where
+  // low-star gamified "bounty" repos with no real payouts dominate results
+  min_stars: z.number().default(200),
   keywords_exclude: z.array(z.string()).default([]),
+  repos_exclude: z.array(z.string()).default([]),
+  require_bounty_amount: z.boolean().default(true),
   max_results: z.number().default(50),
 });
 

@@ -80,7 +80,9 @@ sources:
     min_bounty: 50             # Minimum bounty amount in USD (0 = no minimum)
 
   # GitHub Global Label Search — searches ALL of GitHub for bounty-labeled issues
-  # This discovers bounties beyond your watched repos
+  # This discovers bounties beyond your watched repos. Defaults are
+  # precision-first: low-star gamified "bounty" repos with no real payouts
+  # dominate unfiltered results.
   github_search:
     enabled: false             # Set to true to enable global search
     labels:                    # GitHub labels to search for
@@ -90,6 +92,10 @@ sources:
       - typescript
       - python
       - go
-    min_stars: 50              # Only include repos with >= N stars (0 = disabled)
+    min_stars: 200             # Only include repos with >= N stars (0 = disabled)
     keywords_exclude: []       # Skip issues containing these keywords
+    repos_exclude:             # Blocklist of owner/repo to always skip (bounty farms)
+      - waxeye7/screeps-bounty-arena
+      - xevrion-v2/agent-playground
+    require_bounty_amount: true # Drop issues with no detected $ amount in title/body
     max_results: 50            # Max results per search
