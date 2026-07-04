@@ -300,6 +300,12 @@ bounty-hunter seen --add owner/repo#123
 
 # Output current watchlist config as JSON
 bounty-hunter config
+
+# Health-check the installed launchd job (verifies the plist's Node binary
+# and monitor script still exist and the job is loaded). Exits non-zero on
+# any failure, so it is safe to wire into a cron/watchdog. Add --json for
+# machine-readable output.
+bounty-hunter doctor
 ```
 
 ## Background Monitor
@@ -316,7 +322,13 @@ node dist/install-launchd.js install
 
 This creates a launchd plist at `~/Library/LaunchAgents/com.bounty-hunter.monitor.plist`, loads it immediately, verifies the job is actually listed, and starts polling. The monitor runs at login and on the configured interval.
 
-The installer validates everything up front and refuses to install when the build is missing, the watchlist config is absent or invalid, or the Telegram credentials are placeholders. launchd jobs do not inherit your shell environment, so the real `bot_token` and `chat_id` must live in `~/.bounty-hunter/watchlist.yml` (set the file to `chmod 600`). The plist pins the absolute Node binary that ran the installer, so version-manager shims and PATH differences cannot break the scheduled runs.
+The installer validates everything up front and refuses to install when the build is missing, the watchlist config is absent or invalid, or the Telegram credentials are placeholders. launchd jobs do not inherit your shell environment, so the real `bot_token` and `chat_id` must live in `~/.bounty-hunter/watchlist.yml` (set the file to `chmod 600`).
+
+The plist pins an absolute Node binary (not a bare `node` PATH lookup), so version-manager shims and PATH differences cannot break the scheduled runs. When the installer's `node` came from Homebrew, it deliberately uses the stable `/opt/homebrew/bin/node` (or `/usr/local/bin/node`) symlink rather than the version-pinned `.../Cellar/node/<version>/bin/node` path that `process.execPath` resolves to. Pinning the Cellar path would be a silent-death trap: the next `brew upgrade node` deletes that directory, launchd can never spawn the job again, and the in-process heartbeat never fires. If you install with a non-Homebrew Node (nvm, asdf, a system build), that absolute path is used as-is, so re-run `install` after switching Node managers.
+
+### Health check
+
+Run `bounty-hunter doctor` (or `node dist/install-launchd.js doctor`) to confirm the job is still viable: it checks that the plist exists, that the Node binary and monitor script paths inside it still resolve, and that the job is loaded in `launchctl list`. It exits non-zero on any failure so you can wire it into an external watchdog. If a past `brew upgrade node` broke an install pinned to an old Cellar path, the `node-path` check fails with a re-install hint.
 
 ### Uninstall the Monitor
 
@@ -390,7 +402,7 @@ bounty-hunter/
 │   ├── github.ts              # GitHub issue fetcher (wraps gh CLI via execFileSync)
 │   ├── telegram.ts            # Telegram Bot API (send messages, get updates)
 │   ├── monitor.ts             # Background polling loop + pre-filter logic
-│   ├── index.ts               # CLI entry point (scan, notify, post-comment, seen, config)
+│   ├── index.ts               # CLI entry point (scan, notify, post-comment, seen, config, doctor)
 │   └── install-launchd.ts     # macOS launchd plist generator and installer
 ├── commands/
 │   ├── hunt.md                # /hunt — scan for bounties

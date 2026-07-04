@@ -21,10 +21,38 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+function unescapeXml(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Resolve a Node binary path that survives `brew upgrade node`.
+ *
+ * `process.execPath` resolves symlinks, so under Homebrew it is the
+ * version-pinned Cellar path (e.g. /opt/homebrew/Cellar/node/26.0.0/bin/node).
+ * Pinning that into the plist is a silent-death trap: the next `brew upgrade
+ * node` deletes that directory and launchd can never spawn the job again.
+ * When execPath is under a Homebrew Cellar, prefer the stable
+ * `<brew-prefix>/bin/node` symlink (which Homebrew re-points on every upgrade)
+ * if it exists; otherwise fall back to execPath unchanged.
+ */
+export function resolveDurableNodePath(execPath: string = process.execPath): string {
+  const marker = "/Cellar/";
+  const idx = execPath.indexOf(marker);
+  if (idx === -1) return execPath;
+  const brewPrefix = execPath.slice(0, idx); // e.g. /opt/homebrew or /usr/local
+  const stable = join(brewPrefix, "bin", "node");
+  return existsSync(stable) ? stable : execPath;
+}
+
 export function generatePlist(
   monitorScriptPath: string,
   intervalSeconds: number,
-  nodePath: string = process.execPath
+  nodePath: string = resolveDurableNodePath()
 ): string {
   const logPath = join(getDataDir(), "monitor.log");
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -139,6 +167,92 @@ export function installLaunchd(monitorScriptPath: string): void {
   console.log(`Logs: ${join(getDataDir(), "monitor.log")}`);
 }
 
+/**
+ * Extract the ProgramArguments array (argv) from a generated plist. Pure so it
+ * can be unit-tested without a real LaunchAgents file. Returns [] if the key or
+ * array is absent.
+ */
+export function extractProgramArguments(plistXml: string): string[] {
+  const keyIdx = plistXml.indexOf("<key>ProgramArguments</key>");
+  if (keyIdx === -1) return [];
+  const arrayStart = plistXml.indexOf("<array>", keyIdx);
+  const arrayEnd = plistXml.indexOf("</array>", arrayStart);
+  if (arrayStart === -1 || arrayEnd === -1) return [];
+  const block = plistXml.slice(arrayStart, arrayEnd);
+  return [...block.matchAll(/<string>([\s\S]*?)<\/string>/g)].map((m) =>
+    unescapeXml(m[1])
+  );
+}
+
+export interface DoctorCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface DoctorReport {
+  ok: boolean;
+  checks: DoctorCheck[];
+}
+
+/**
+ * Health check for the installed launchd job. The CRITICAL failure this exists
+ * to catch: the plist's Node binary path no longer exists (e.g. after
+ * `brew upgrade node` on an old install that pinned a Cellar path), so launchd
+ * fails to spawn the job forever and the in-process heartbeat can never fire.
+ */
+export function doctor(): DoctorReport {
+  const checks: DoctorCheck[] = [];
+  const plistPath = getPlistPath();
+  const plistExists = existsSync(plistPath);
+  checks.push({
+    name: "plist",
+    ok: plistExists,
+    detail: plistExists
+      ? `present: ${plistPath}`
+      : `missing: ${plistPath} — run "node dist/install-launchd.js install"`,
+  });
+
+  if (plistExists) {
+    const [nodePath, scriptPath] = extractProgramArguments(
+      readFileSync(plistPath, "utf-8")
+    );
+
+    const nodeOk = !!nodePath && existsSync(nodePath);
+    checks.push({
+      name: "node-path",
+      ok: nodeOk,
+      detail: nodeOk
+        ? `Node binary exists: ${nodePath}`
+        : `Node binary NOT found: ${nodePath ?? "(none in plist)"} — a "brew upgrade node" likely moved it. Re-run "node dist/install-launchd.js install" to re-point the plist.`,
+    });
+
+    const scriptOk = !!scriptPath && existsSync(scriptPath);
+    checks.push({
+      name: "monitor-script",
+      ok: scriptOk,
+      detail: scriptOk
+        ? `monitor script exists: ${scriptPath}`
+        : `monitor script NOT found: ${scriptPath ?? "(none in plist)"} — run "npm run build".`,
+    });
+
+    let loaded = false;
+    try {
+      execFileSync("launchctl", ["list", PLIST_NAME], { stdio: "ignore" });
+      loaded = true;
+    } catch {}
+    checks.push({
+      name: "launchd-loaded",
+      ok: loaded,
+      detail: loaded
+        ? `${PLIST_NAME} is loaded`
+        : `${PLIST_NAME} not in "launchctl list" — the job is not scheduled. Re-run install.`,
+    });
+  }
+
+  return { ok: checks.every((c) => c.ok), checks };
+}
+
 export function uninstallLaunchd(): void {
   const plistPath = getPlistPath();
   try {
@@ -160,7 +274,13 @@ if (isMain) {
     installLaunchd(scriptPath);
   } else if (action === "uninstall") {
     uninstallLaunchd();
+  } else if (action === "doctor") {
+    const report = doctor();
+    for (const c of report.checks) {
+      console.log(`${c.ok ? "✅" : "❌"} ${c.name}: ${c.detail}`);
+    }
+    process.exit(report.ok ? 0 : 1);
   } else {
-    console.log("Usage: install-launchd <install|uninstall>");
+    console.log("Usage: install-launchd <install|uninstall|doctor>");
   }
 }
