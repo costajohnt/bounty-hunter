@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { generatePlist, validateInstallPreconditions } from "./install-launchd.js";
+import {
+  generatePlist,
+  validateInstallPreconditions,
+  resolveDurableNodePath,
+  extractProgramArguments,
+  doctor,
+} from "./install-launchd.js";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -46,15 +52,127 @@ describe("generatePlist", () => {
     expect(plist).not.toContain("&chars>");
   });
 
-  it("uses the absolute node binary instead of a bare PATH lookup", () => {
+  it("uses a durable absolute node binary instead of a bare PATH lookup", () => {
     const plist = generatePlist("/path/monitor.js", 300);
-    expect(plist).toContain(`<string>${process.execPath}</string>`);
+    expect(plist).toContain(`<string>${resolveDurableNodePath()}</string>`);
     expect(plist).not.toContain("<string>node</string>");
+  });
+
+  it("does not embed a version-pinned Homebrew Cellar node path by default", () => {
+    // The CRITICAL finding: pinning /opt/homebrew/Cellar/node/<version>/bin/node
+    // means `brew upgrade node` silently kills the launchd job forever. When the
+    // stable brew symlink exists, the default must not point inside Cellar.
+    const durable = resolveDurableNodePath();
+    if (!durable.includes("/Cellar/")) {
+      const plist = generatePlist("/path/monitor.js", 300);
+      expect(plist).not.toContain("/Cellar/");
+    }
   });
 
   it("accepts an explicit node path", () => {
     const plist = generatePlist("/path/monitor.js", 300, "/custom/node");
     expect(plist).toContain("<string>/custom/node</string>");
+  });
+});
+
+describe("resolveDurableNodePath", () => {
+  it("returns a non-Homebrew path unchanged", () => {
+    expect(resolveDurableNodePath("/usr/bin/node")).toBe("/usr/bin/node");
+    expect(resolveDurableNodePath("/some/nvm/versions/node/v22/bin/node")).toBe(
+      "/some/nvm/versions/node/v22/bin/node"
+    );
+  });
+
+  it("maps a Homebrew Cellar path to the stable symlink when it exists", () => {
+    const prefix = "/tmp/bounty-hunter-durable-node";
+    mkdirSync(join(prefix, "bin"), { recursive: true });
+    writeFileSync(join(prefix, "bin", "node"), "// stable node symlink target");
+    try {
+      const cellar = `${prefix}/Cellar/node/26.0.0/bin/node`;
+      expect(resolveDurableNodePath(cellar)).toBe(`${prefix}/bin/node`);
+    } finally {
+      rmSync(prefix, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the Cellar path when no stable symlink exists", () => {
+    const cellar = "/tmp/bounty-hunter-no-symlink/Cellar/node/26.0.0/bin/node";
+    expect(resolveDurableNodePath(cellar)).toBe(cellar);
+  });
+});
+
+describe("extractProgramArguments", () => {
+  it("parses node path and script path out of a generated plist", () => {
+    const plist = generatePlist("/data/monitor.js", 300, "/opt/homebrew/bin/node");
+    expect(extractProgramArguments(plist)).toEqual([
+      "/opt/homebrew/bin/node",
+      "/data/monitor.js",
+    ]);
+  });
+
+  it("unescapes XML entities in extracted paths", () => {
+    const plist = generatePlist("/path/with&<>chars.js", 300, "/opt/node");
+    expect(extractProgramArguments(plist)).toEqual([
+      "/opt/node",
+      "/path/with&<>chars.js",
+    ]);
+  });
+
+  it("returns [] when ProgramArguments is absent", () => {
+    expect(extractProgramArguments("<plist><dict></dict></plist>")).toEqual([]);
+  });
+});
+
+describe("doctor", () => {
+  let originalHome: string | undefined;
+  const HOME = "/tmp/bounty-hunter-doctor-test";
+
+  beforeEach(() => {
+    originalHome = process.env.HOME;
+    process.env.HOME = HOME;
+    rmSync(HOME, { recursive: true, force: true });
+    mkdirSync(HOME, { recursive: true });
+  });
+
+  afterEach(() => {
+    process.env.HOME = originalHome;
+    rmSync(HOME, { recursive: true, force: true });
+  });
+
+  it("reports the plist as missing when nothing is installed", () => {
+    const report = doctor();
+    expect(report.ok).toBe(false);
+    const plistCheck = report.checks.find((c) => c.name === "plist");
+    expect(plistCheck?.ok).toBe(false);
+  });
+
+  it("flags a node path that no longer exists (the brew-upgrade death)", () => {
+    const plistDir = join(HOME, "Library", "LaunchAgents");
+    mkdirSync(plistDir, { recursive: true });
+    // Simulate an old install pinned to a now-deleted Cellar version.
+    const plist = generatePlist(
+      "/does/not/exist/monitor.js",
+      300,
+      "/opt/homebrew/Cellar/node/1.0.0/bin/node"
+    );
+    writeFileSync(join(plistDir, "com.bounty-hunter.monitor.plist"), plist);
+
+    const report = doctor();
+    expect(report.ok).toBe(false);
+    const nodeCheck = report.checks.find((c) => c.name === "node-path");
+    expect(nodeCheck?.ok).toBe(false);
+    expect(nodeCheck?.detail).toMatch(/brew upgrade node/);
+  });
+
+  it("passes the node-path check when the plist points at a live binary", () => {
+    const plistDir = join(HOME, "Library", "LaunchAgents");
+    mkdirSync(plistDir, { recursive: true });
+    const plist = generatePlist("/does/not/exist/monitor.js", 300, process.execPath);
+    writeFileSync(join(plistDir, "com.bounty-hunter.monitor.plist"), plist);
+
+    const report = doctor();
+    const nodeCheck = report.checks.find((c) => c.name === "node-path");
+    expect(nodeCheck?.ok).toBe(true);
   });
 });
 

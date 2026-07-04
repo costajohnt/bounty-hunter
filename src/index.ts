@@ -8,6 +8,7 @@ import { SeenStore, effectiveRetentionDays } from "./seen.js";
 import { sendTelegramMessage, formatBountyNotification } from "./telegram.js";
 import { applyPreFilter, applyFreshnessFilter, resolveRepoFilters } from "./monitor.js";
 import { vetIssue } from "./vet.js";
+import { doctor } from "./install-launchd.js";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { BountyIssue, VetResult } from "./types.js";
@@ -238,8 +239,20 @@ async function main() {
       break;
     }
 
+    case "doctor": {
+      const report = doctor();
+      if (flags) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        for (const c of report.checks) {
+          console.log(`${c.ok ? "✅" : "❌"} ${c.name}: ${c.detail}`);
+        }
+      }
+      process.exit(report.ok ? 0 : 1);
+    }
+
     default:
-      console.log("Usage: bounty-hunter <scan|notify|post-comment|seen|config> [--json]");
+      console.log("Usage: bounty-hunter <scan|notify|post-comment|seen|config|doctor> [--json]");
   }
 }
 

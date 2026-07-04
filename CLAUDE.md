@@ -51,7 +51,7 @@ src/
   telegram.ts            Telegram Bot API client (send messages, get updates, vet-enriched notifications)
   vet.ts                 Issue vetting — rule-based checks (access, competition, bounty, platform)
   monitor.ts             Background polling loop + pre-filter + vetting integration
-  index.ts               CLI entry point (scan, notify, post-comment, seen, config)
+  index.ts               CLI entry point (scan, notify, post-comment, seen, config, doctor)
   install-launchd.ts     macOS launchd plist generator and installer
 
 commands/                Claude Code slash commands
