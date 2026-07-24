@@ -75,9 +75,11 @@ Edit the file to add your bot token, chat ID, and the repos you want to watch. S
 # Test it once to make sure it works
 node dist/monitor.js
 
-# Install the launchd agent to run every 5 minutes
+# macOS: install the launchd agent to run every 5 minutes
 node dist/install-launchd.js install
 ```
+
+On Linux there is no installer; schedule the one-shot monitor script with cron instead (see [Background Monitor](#background-monitor)).
 
 You'll get a Telegram message whenever a new bounty appears. To claim one, open Claude Code with the plugin loaded and use `/claim`:
 
@@ -312,7 +314,15 @@ bounty-hunter doctor
 
 The background monitor is a standalone Node.js script that runs without AI. It polls GitHub and Boss.dev on a timer, checks for new issues against the seen store, and sends Telegram notifications for anything new.
 
-On macOS, it runs as a launchd agent that fires every N minutes (matching your `polling_interval` setting). launchd is the only supported scheduler: a GitHub Actions cron was tried and abandoned because GitHub silently disables scheduled workflows after 60 days of repo inactivity, which is fatal for a monitor that should outlive active development (the repo's `Bounty Monitor` workflow remains as a manual smoke test only).
+On macOS, it runs as a launchd agent that fires every N minutes (matching your `polling_interval` setting). launchd is the only scheduler with an installer: a GitHub Actions cron was tried and abandoned because GitHub silently disables scheduled workflows after 60 days of repo inactivity, which is fatal for a monitor that should outlive active development (the repo's `Bounty Monitor` workflow remains as a manual smoke test only).
+
+**Linux:** the launchd installer (`install-launchd.js`) is macOS-only, but the monitor itself is a plain one-shot Node script, so any scheduler works. With cron:
+
+```cron
+*/5 * * * * /usr/bin/node /path/to/bounty-hunter/dist/monitor.js >> ~/.bounty-hunter/monitor.log 2>&1
+```
+
+Use an absolute Node path (`which node`), since cron does not inherit your shell PATH, and match the interval to your `polling_interval` setting. A systemd timer running the same command works equally well. `bounty-hunter doctor` only checks launchd installs, so it is not useful on Linux.
 
 ### Install the Monitor
 
