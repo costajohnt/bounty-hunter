@@ -410,7 +410,7 @@ bounty-hunter/
 │   ├── config.ts              # YAML config loader, data directory management
 │   ├── seen.ts                # SeenStore — JSON-backed deduplication
 │   ├── github.ts              # GitHub issue fetcher (wraps gh CLI via execFileSync)
-│   ├── telegram.ts            # Telegram Bot API (send messages, get updates)
+│   ├── telegram.ts            # Telegram Bot API (send messages)
 │   ├── monitor.ts             # Background polling loop + pre-filter logic
 │   ├── index.ts               # CLI entry point (scan, notify, post-comment, seen, config, doctor)
 │   └── install-launchd.ts     # macOS launchd plist generator and installer

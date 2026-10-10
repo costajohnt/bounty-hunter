@@ -137,3 +137,9 @@ describe("formatBountyNotification", () => {
     expect(msg).not.toContain("~$250");
   });
 });
+
+describe("formatBountyNotification footer", () => {
+  it("does not promise a reply-to-skip feature that nothing reads", () => {
+    expect(formatBountyNotification(makeIssue())).not.toMatch(/skip/i);
+  });
+});
