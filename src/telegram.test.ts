@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { formatBountyNotification } from "./telegram.js";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { formatBountyNotification, sendTelegramMessage, retryAfterSeconds } from "./telegram.js";
 import type { BountyIssue, VetResult } from "./types.js";
 
 const makeIssue = (overrides: Partial<BountyIssue> = {}): BountyIssue => ({
@@ -141,5 +141,47 @@ describe("formatBountyNotification", () => {
 describe("formatBountyNotification footer", () => {
   it("does not promise a reply-to-skip feature that nothing reads", () => {
     expect(formatBountyNotification(makeIssue())).not.toMatch(/skip/i);
+  });
+});
+
+describe("sendTelegramMessage", () => {
+  const cfg = { bot_token: "t", chat_id: "c" };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const res = (status: number, body: string) =>
+    ({ ok: status >= 200 && status < 300, status, text: async () => body }) as Response;
+
+  it("retries once after a 429, honoring retry_after", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(res(429, JSON.stringify({ ok: false, parameters: { retry_after: 0 } })))
+      .mockResolvedValueOnce(res(200, "{}"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(sendTelegramMessage(cfg, "hi")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after the single retry", async () => {
+    const body = JSON.stringify({ ok: false, parameters: { retry_after: 0 } });
+    const fetchMock = vi.fn().mockResolvedValue(res(429, body));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(sendTelegramMessage(cfg, "hi")).rejects.toThrow(/429/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry other errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(400, "bad request"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(sendTelegramMessage(cfg, "hi")).rejects.toThrow(/400/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("parses and caps retry_after", () => {
+    expect(retryAfterSeconds(JSON.stringify({ parameters: { retry_after: 5 } }))).toBe(5);
+    expect(retryAfterSeconds(JSON.stringify({ parameters: { retry_after: 3600 } }))).toBe(60);
+    expect(retryAfterSeconds("not json")).toBeUndefined();
+    expect(retryAfterSeconds("{}")).toBeUndefined();
   });
 });

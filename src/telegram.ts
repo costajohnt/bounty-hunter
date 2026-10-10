@@ -46,22 +46,51 @@ export function formatBountyNotification(
   ].join("\n");
 }
 
+/** Longest Telegram-requested back-off honored before the single retry. */
+const MAX_RETRY_AFTER_SECONDS = 60;
+
+/**
+ * Sends one message. On HTTP 429 Telegram returns parameters.retry_after
+ * (seconds); that wait is honored once (capped) before a single retry, since
+ * a burst of new bounties is exactly when the rate limit trips.
+ */
 export async function sendTelegramMessage(
   config: TelegramConfig,
   text: string
 ): Promise<void> {
   const url = `${API_BASE}${config.bot_token}/sendMessage`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: config.chat_id,
-      text,
-      disable_web_page_preview: true,
-    }),
+  const body = JSON.stringify({
+    chat_id: config.chat_id,
+    text,
+    disable_web_page_preview: true,
   });
-  if (!response.ok) {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    if (response.ok) return;
     const err = await response.text();
+    if (response.status === 429 && attempt === 0) {
+      const wait = retryAfterSeconds(err);
+      if (wait !== undefined) {
+        await new Promise((r) => setTimeout(r, wait * 1000));
+        continue;
+      }
+    }
     throw new Error(`Telegram API error: ${response.status} — ${err}`);
+  }
+}
+
+/** parameters.retry_after from a Telegram error body, capped; undefined if absent. */
+export function retryAfterSeconds(errorBody: string): number | undefined {
+  try {
+    const parsed = JSON.parse(errorBody) as { parameters?: { retry_after?: unknown } };
+    const v = parsed.parameters?.retry_after;
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return undefined;
+    return Math.min(v, MAX_RETRY_AFTER_SECONDS);
+  } catch {
+    return undefined;
   }
 }
