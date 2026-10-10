@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { parseIssueUrl, buildSearchArgs, buildIssueViewArgs, buildIssueMetadataArgs } from "./github.js";
+import { parseIssueUrl, buildSearchArgs, buildIssueViewArgs, buildIssueMetadataArgs, fetchRepoIssues } from "./github.js";
 
 const mockExecFileSync = vi.fn();
 vi.mock("node:child_process", () => ({
@@ -24,7 +24,7 @@ describe("parseIssueUrl", () => {
 
 describe("buildSearchArgs", () => {
   it("builds gh search args for a repo with labels", () => {
-    const args = buildSearchArgs("Expensify/App", ["Help Wanted"]);
+    const args = buildSearchArgs("Expensify/App", "Help Wanted");
     expect(args).toContain("search");
     expect(args).toContain("issues");
     expect(args).toContain("Expensify/App");
@@ -32,20 +32,68 @@ describe("buildSearchArgs", () => {
   });
 
   it("includes assignees in the JSON fields", () => {
-    const args = buildSearchArgs("Expensify/App", ["Help Wanted"]);
+    const args = buildSearchArgs("Expensify/App", "Help Wanted");
     const jsonIdx = args.indexOf("--json");
     const jsonFields = args[jsonIdx + 1];
     expect(jsonFields).toContain("assignees");
   });
 
-  it("includes all labels when multiple are provided", () => {
-    const args = buildSearchArgs("Expensify/App", ["Help Wanted", "External", "Bug"]);
-    expect(args).toContain("Help Wanted");
-    expect(args).toContain("External");
-    expect(args).toContain("Bug");
-    // Each label should be preceded by --label
+  it("passes a single --label (GitHub search ANDs repeated label qualifiers)", () => {
+    const args = buildSearchArgs("Expensify/App", "Help Wanted");
     const labelFlags = args.reduce((count, arg) => arg === "--label" ? count + 1 : count, 0);
-    expect(labelFlags).toBe(3);
+    expect(labelFlags).toBe(1);
+  });
+
+  it("omits --label when no label is given", () => {
+    expect(buildSearchArgs("Expensify/App")).not.toContain("--label");
+  });
+});
+
+describe("fetchRepoIssues", () => {
+  const issue = (number: number, createdAt: string, label: string) => ({
+    number,
+    title: `Issue ${number}`,
+    url: `https://github.com/o/r/issues/${number}`,
+    createdAt,
+    labels: [{ name: label }],
+    assignees: [],
+    body: "",
+    commentsCount: 0,
+  });
+
+  it("ORs repo labels: one search per label, deduped by issue number", () => {
+    mockExecFileSync.mockReset();
+    mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      const label = args[args.indexOf("--label") + 1];
+      if (label === "bounty") {
+        return JSON.stringify([issue(1, "2026-01-01T00:00:00Z", "bounty"), issue(3, "2026-01-03T00:00:00Z", "bounty")]);
+      }
+      if (label === "💰 bounty") {
+        return JSON.stringify([issue(2, "2026-01-02T00:00:00Z", "💰 bounty"), issue(3, "2026-01-03T00:00:00Z", "💰 bounty")]);
+      }
+      return "[]";
+    });
+
+    const issues = fetchRepoIssues("o/r", ["bounty", "💰 bounty"]);
+
+    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    for (const call of mockExecFileSync.mock.calls) {
+      expect(call[0]).toBe("gh");
+      expect(Array.isArray(call[1])).toBe(true);
+      expect((call[1] as string[]).filter((a) => a === "--label")).toHaveLength(1);
+    }
+    expect(issues.map((i) => i.number)).toEqual([3, 2, 1]);
+  });
+
+  it("runs one unlabeled search when no labels are configured", () => {
+    mockExecFileSync.mockReset();
+    mockExecFileSync.mockReturnValue(JSON.stringify([issue(5, "2026-01-05T00:00:00Z", "bug")]));
+
+    const issues = fetchRepoIssues("o/r", []);
+
+    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+    expect(mockExecFileSync.mock.calls[0][1]).not.toContain("--label");
+    expect(issues.map((i) => i.number)).toEqual([5]);
   });
 });
 

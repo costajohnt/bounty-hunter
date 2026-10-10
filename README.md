@@ -212,7 +212,7 @@ sources:
 | `telegram.bot_token` | Token from @BotFather |
 | `telegram.chat_id` | Your Telegram chat ID (the setup wizard helps you find this) |
 | `sources.repos[].name` | GitHub repo in `owner/repo` format |
-| `sources.repos[].labels` | Only match issues with these labels |
+| `sources.repos[].labels` | Only match issues carrying any of these labels (one search per label, results merged) |
 | `sources.repos[].proposal_template` | Which template to use: `expensify`, `default`, or `auto` |
 | `sources.repos[].pre_filter.keywords_exclude` | Skip issues whose title or body contains these keywords |
 | `sources.repos[].filters` | Per-repo overrides of the global `filters` block (`max_age_days`, `skip_assigned`, `claimed_labels`, `max_comment_count`). Needed for repos like Expensify/App that auto-assign and bot-comment on every issue, which the global defaults would drop entirely |
