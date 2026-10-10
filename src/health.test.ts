@@ -16,6 +16,25 @@ describe("HealthStore", () => {
     vi.restoreAllMocks();
   });
 
+  describe("notification failure streak", () => {
+    it("requests an alert at the threshold, stops once delivered, resets on success", () => {
+      const h = new HealthStore(path);
+      const results: boolean[] = [];
+      for (let i = 0; i < FAILURE_ALERT_THRESHOLD + 1; i++) results.push(h.recordNotifyFailure());
+      expect(results).toEqual([false, false, true, true]);
+      h.markNotifyFailureAlerted();
+      expect(h.recordNotifyFailure()).toBe(false);
+      expect(new HealthStore(path).buildHeartbeatMessage()).toContain(
+        `last ${FAILURE_ALERT_THRESHOLD + 2} send(s) failed`
+      );
+      h.recordNotifySuccess();
+      const reloaded = new HealthStore(path);
+      expect(reloaded.buildHeartbeatMessage()).not.toContain("Notifications:");
+      for (let i = 0; i < FAILURE_ALERT_THRESHOLD - 1; i++) reloaded.recordNotifyFailure();
+      expect(reloaded.recordNotifyFailure()).toBe(true);
+    });
+  });
+
   describe("failure streaks", () => {
     it("requests an alert from the threshold onward until delivery is marked", () => {
       const h = new HealthStore(path);

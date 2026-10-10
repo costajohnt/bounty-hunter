@@ -48,7 +48,7 @@ src/
   github.ts              GitHub issue fetcher + comment fetcher (wraps gh CLI via execFileSync)
   github-search.ts       GitHub Global Search — search all of GitHub for bounty-labeled issues
   boss.ts                  Boss.dev API client (public API, USD amounts)
-  telegram.ts            Telegram Bot API client (send messages, get updates, vet-enriched notifications)
+  telegram.ts            Telegram Bot API client (send messages with one retry on 429, vet-enriched notifications)
   vet.ts                 Issue vetting — rule-based checks (access, competition, bounty, platform)
   monitor.ts             Background polling loop + pre-filter + vetting integration
   index.ts               CLI entry point (scan, notify, post-comment, seen, config, doctor)
@@ -101,12 +101,12 @@ templates/
 ## Data Flow
 
 1. `config.ts` loads `~/.bounty-hunter/watchlist.yml` → `WatchlistConfig`
-2. `monitor.ts` iterates repos: `fetchRepoIssues()` → `applyPreFilter()` → `applyFreshnessFilter()` → `seen.markSeenFromBounty()`
+2. `monitor.ts` iterates repos: `fetchRepoIssues()` → `applyPreFilter()` → `applyFreshnessFilter()` → queued (in-run dedupe set; nothing persisted yet)
 3. `monitor.ts` vets survivors: `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
 4. `monitor.ts` polls GitHub Global Search: `fetchGlobalBounties()` → dedup watched repos → `applyFreshnessFilter()` → `fetchIssueComments()` → `vetIssue()` → `shouldNotify()`
 5. `monitor.ts` polls Boss.dev: `fetchBossBounties(buildBossFilters())` → `fetchIssueMetadata()` (enrich) → freshness → `fetchIssueComments()` → `vetIssue()`
 6. `index.ts` scan uses in-memory `Set<string>` for cross-source dedup within a single run
-7. New issues → `formatBountyNotification(issue, vetResult?)` → `sendTelegramMessage()`
+7. `deliverNotifications()`: `formatBountyNotification(issue, vetResult?)` → `sendTelegramMessage()` → `seen.markSeenFromBounty()` only after delivery (or when vetting skips the issue); failed sends stay unseen and retry next run, with a health-state streak that alerts at 3
 
 ## Testing
 

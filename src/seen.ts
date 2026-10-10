@@ -98,17 +98,4 @@ export class SeenStore {
       skipped: false,
     });
   }
-
-  markSkipped(repo: string, number: number): void {
-    const id = this.makeId(repo, number);
-    this.data.set(id, {
-      id,
-      repo,
-      number,
-      title: "",
-      seen_at: new Date().toISOString(),
-      skipped: true,
-    });
-    this.save();
-  }
 }

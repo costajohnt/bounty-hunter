@@ -17,6 +17,9 @@ interface HealthState {
   last_heartbeat_at?: string;
   scans_since_heartbeat: number;
   queued_since_heartbeat: number;
+  // Bounty notification sends that failed in a row (any success resets it)
+  notify_consecutive_failures: number;
+  notify_failure_alerted?: boolean; // an alert for the current streak was DELIVERED
   sources: Record<string, SourceHealth>;
 }
 
@@ -24,6 +27,7 @@ function emptyState(): HealthState {
   return {
     scans_since_heartbeat: 0,
     queued_since_heartbeat: 0,
+    notify_consecutive_failures: 0,
     sources: {},
   };
 }
@@ -118,6 +122,34 @@ export class HealthStore {
     this.save();
   }
 
+  /** Record a delivered bounty notification. Resets the failure streak. */
+  recordNotifySuccess(): void {
+    if (this.state.notify_consecutive_failures === 0 && !this.state.notify_failure_alerted) return;
+    this.state.notify_consecutive_failures = 0;
+    this.state.notify_failure_alerted = false;
+    this.save();
+  }
+
+  /**
+   * Record a bounty notification that could not be delivered. Returns true
+   * when the streak is at or past FAILURE_ALERT_THRESHOLD and no alert for
+   * it has been delivered yet (same contract as recordSourceFailure).
+   */
+  recordNotifyFailure(): boolean {
+    this.state.notify_consecutive_failures++;
+    this.save();
+    return (
+      this.state.notify_consecutive_failures >= FAILURE_ALERT_THRESHOLD &&
+      !this.state.notify_failure_alerted
+    );
+  }
+
+  /** Call after a notification-failure alert was actually delivered. */
+  markNotifyFailureAlerted(): void {
+    this.state.notify_failure_alerted = true;
+    this.save();
+  }
+
   /** Record one completed monitor run and how many issues it queued. */
   recordScan(queuedCount: number): void {
     this.state.scans_since_heartbeat++;
@@ -140,6 +172,12 @@ export class HealthStore {
       `bounty-hunter alive: ${this.state.scans_since_heartbeat} scans, ` +
         `${this.state.queued_since_heartbeat} bounties queued since last heartbeat.`,
     ];
+    if (this.state.notify_consecutive_failures > 0) {
+      lines.push(
+        `Notifications: last ${this.state.notify_consecutive_failures} send(s) failed; ` +
+          `those bounties will be retried next run.`
+      );
+    }
     const names = Object.keys(this.state.sources);
     if (names.length > 0) {
       const failing = names.filter(

@@ -159,6 +159,72 @@ async function sendAlert(
   }
 }
 
+export interface QueuedBounty {
+  issue: BountyIssue;
+  vetResult?: VetResult;
+}
+
+function issueKey(issue: BountyIssue): string {
+  return `${issue.repo}#${issue.number}`;
+}
+
+export interface DeliveryDeps {
+  seen: Pick<SeenStore, "markSeenFromBounty">;
+  health: Pick<HealthStore, "recordNotifySuccess" | "recordNotifyFailure" | "markNotifyFailureAlerted">;
+  onFail: VettingConfig["on_fail"];
+  send: (text: string) => Promise<void>;
+  alert: (text: string) => Promise<boolean>;
+}
+
+/**
+ * Sends one notification per queued bounty. An issue is marked seen only
+ * after its message is delivered, or when vetting intentionally skips it, so
+ * a failed send (Telegram outage, rate limit, bad token) is retried next run
+ * instead of being lost (#55). Failed sends are counted in health state and
+ * alert after FAILURE_ALERT_THRESHOLD in a row.
+ */
+export async function deliverNotifications(
+  allNew: QueuedBounty[],
+  deps: DeliveryDeps
+): Promise<void> {
+  if (allNew.length === 0) {
+    console.log(`[${new Date().toISOString()}] No new bounties found.`);
+    return;
+  }
+  console.log(`[${new Date().toISOString()}] Found ${allNew.length} new bounties!`);
+
+  let lastError: unknown;
+  let alertDue = false;
+  for (const { issue, vetResult } of allNew) {
+    if (!shouldNotify(vetResult, deps.onFail)) {
+      console.log(`  Skipped (vetting): ${issue.repo}#${issue.number} — ${vetResult?.summary}`);
+      deps.seen.markSeenFromBounty(issue);
+      continue;
+    }
+
+    try {
+      await deps.send(formatBountyNotification(issue, vetResult));
+    } catch (err) {
+      console.error(`  Failed to notify ${issue.repo}#${issue.number} (will retry next run):`, err);
+      lastError = err;
+      if (deps.health.recordNotifyFailure()) alertDue = true;
+      continue;
+    }
+    deps.seen.markSeenFromBounty(issue);
+    deps.health.recordNotifySuccess();
+    alertDue = false;
+    console.log(`  Notified: ${issue.repo}#${issue.number}`);
+  }
+
+  if (alertDue) {
+    const delivered = await deps.alert(
+      `bounty-hunter: ${FAILURE_ALERT_THRESHOLD}+ bounty notifications in a row failed to send; ` +
+        `they will be retried next run. Last error: ${lastError instanceof Error ? lastError.message : lastError}`
+    );
+    if (delivered) deps.health.markNotifyFailureAlerted();
+  }
+}
+
 export async function runMonitor(): Promise<void> {
   const config = loadConfig();
   const dataDir = getDataDir();
@@ -170,7 +236,10 @@ export async function runMonitor(): Promise<void> {
   const health = new HealthStore(join(dataDir, "health.json"));
   const vettingEnabled = config.vetting.enabled;
 
-  const allNew: Array<{ issue: BountyIssue; vetResult?: VetResult }> = [];
+  const allNew: QueuedBounty[] = [];
+  // In-run dedupe across sources. seen.json is only written once an issue's
+  // notification is delivered (or intentionally skipped), see deliverNotifications.
+  const queued = new Set<string>();
 
   // Poll GitHub repos
   for (const repo of config.sources.repos) {
@@ -180,7 +249,7 @@ export async function runMonitor(): Promise<void> {
       const issues = fetchRepoIssues(repo.name, repo.labels);
       tally.fetched = issues.length;
       for (const issue of issues) {
-        if (seen.hasSeen(issue.repo, issue.number)) {
+        if (seen.hasSeen(issue.repo, issue.number) || queued.has(issueKey(issue))) {
           tally.already_seen++;
           continue;
         }
@@ -194,9 +263,7 @@ export async function runMonitor(): Promise<void> {
           continue;
         }
         tally.queued++;
-
-        // Mark seen regardless of vetting outcome to prevent re-checking
-        seen.markSeenFromBounty(issue);
+        queued.add(issueKey(issue));
 
         // Vet the issue if enabled
         let vetResult: VetResult | undefined;
@@ -238,7 +305,7 @@ export async function runMonitor(): Promise<void> {
       const bounties = fetchGlobalBounties(config.sources.github_search, watchedRepos);
       tally.fetched = bounties.length;
       for (const issue of bounties) {
-        if (seen.hasSeen(issue.repo, issue.number)) {
+        if (seen.hasSeen(issue.repo, issue.number) || queued.has(issueKey(issue))) {
           tally.already_seen++;
           continue;
         }
@@ -248,8 +315,7 @@ export async function runMonitor(): Promise<void> {
           continue;
         }
         tally.queued++;
-
-        seen.markSeenFromBounty(issue);
+        queued.add(issueKey(issue));
 
         let vetResult: VetResult | undefined;
         if (vettingEnabled) {
@@ -289,7 +355,7 @@ export async function runMonitor(): Promise<void> {
       const bounties = await fetchBossBounties(buildBossFilters(config.sources.boss));
       tally.fetched = bounties.length;
       for (const issue of bounties) {
-        if (seen.hasSeen(issue.repo, issue.number)) {
+        if (seen.hasSeen(issue.repo, issue.number) || queued.has(issueKey(issue))) {
           tally.already_seen++;
           continue;
         }
@@ -315,8 +381,7 @@ export async function runMonitor(): Promise<void> {
           continue;
         }
         tally.queued++;
-
-        seen.markSeenFromBounty(issue);
+        queued.add(issueKey(issue));
 
         let vetResult: VetResult | undefined;
         if (vettingEnabled) {
@@ -350,27 +415,13 @@ export async function runMonitor(): Promise<void> {
 
   health.recordScan(allNew.length);
 
-  // Notify
-  if (allNew.length === 0) {
-    console.log(`[${new Date().toISOString()}] No new bounties found.`);
-  } else {
-    console.log(`[${new Date().toISOString()}] Found ${allNew.length} new bounties!`);
-
-    for (const { issue, vetResult } of allNew) {
-      if (!shouldNotify(vetResult, config.vetting.on_fail)) {
-        console.log(`  Skipped (vetting): ${issue.repo}#${issue.number} — ${vetResult?.summary}`);
-        continue;
-      }
-
-      try {
-        const message = formatBountyNotification(issue, vetResult);
-        await sendTelegramMessage(config.telegram, message);
-        console.log(`  Notified: ${issue.repo}#${issue.number}`);
-      } catch (err) {
-        console.error(`  Failed to notify ${issue.repo}#${issue.number}:`, err);
-      }
-    }
-  }
+  await deliverNotifications(allNew, {
+    seen,
+    health,
+    onFail: config.vetting.on_fail,
+    send: (text) => sendTelegramMessage(config.telegram, text),
+    alert: (text) => sendAlert(config.telegram, text),
+  });
 
   // Heartbeat: counters reset only after the send actually succeeds, so a
   // Telegram outage delays the heartbeat instead of eating it

@@ -47,11 +47,6 @@ describe("SeenStore", () => {
     expect(store2.hasSeen("Expensify/App", 81500)).toBe(true);
   });
 
-  it("marks issues as skipped", () => {
-    store.markSkipped("Expensify/App", 81500);
-    expect(store.hasSeen("Expensify/App", 81500)).toBe(true);
-  });
-
   it("marks seen from a BountyIssue", () => {
     const bountyIssue: BountyIssue = {
       source: "github",

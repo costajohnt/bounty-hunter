@@ -7,7 +7,13 @@ import {
   newDropTally,
   resolveRepoFilters,
   shouldNotify,
+  deliverNotifications,
 } from "./monitor.js";
+import { SeenStore } from "./seen.js";
+import { HealthStore, FAILURE_ALERT_THRESHOLD } from "./health.js";
+import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { BountyIssue, Filters, VetResult } from "./types.js";
 
 const makeIssue = (overrides: Partial<BountyIssue> = {}): BountyIssue => ({
@@ -355,6 +361,106 @@ describe("formatSourceSummary", () => {
     tally.pre_filter = 1;
     expect(formatSourceSummary("repo", tally)).toBe(
       "repo: fetched 5, queued 0 (dropped: already_seen 4, pre_filter 1)"
+    );
+  });
+});
+
+describe("deliverNotifications", () => {
+  let dir: string;
+  const seenIds = (): string[] => {
+    const p = join(dir, "seen.json");
+    if (!existsSync(p)) return [];
+    return (JSON.parse(readFileSync(p, "utf-8")) as Array<{ id: string }>).map((e) => e.id);
+  };
+  const setup = () => {
+    dir = mkdtempSync(join(tmpdir(), "bounty-hunter-deliver-"));
+    return {
+      seen: new SeenStore(join(dir, "seen.json")),
+      health: new HealthStore(join(dir, "health.json")),
+    };
+  };
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it("does not mark an issue seen when its notification fails to send", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const { seen, health } = setup();
+    await deliverNotifications([{ issue: makeIssue({ number: 1 }) }], {
+      seen,
+      health,
+      onFail: "warn",
+      send: async () => {
+        throw new Error("Telegram API error: 502");
+      },
+      alert: async () => true,
+    });
+    expect(seenIds()).toEqual([]);
+    // A fresh store (next run) still treats it as new
+    expect(new SeenStore(join(dir, "seen.json")).hasSeen("Expensify/App", 1)).toBe(false);
+  });
+
+  it("marks delivered and vetting-skipped issues seen, but not failed ones", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const { seen, health } = setup();
+    const failedVet: VetResult = {
+      passed: false,
+      signals: [],
+      proposal_count: 9,
+      has_approved_proposal: false,
+      summary: "too many",
+    };
+    const sent: number[] = [];
+    await deliverNotifications(
+      [
+        { issue: makeIssue({ number: 1 }) },
+        { issue: makeIssue({ number: 2 }) },
+        { issue: makeIssue({ number: 3 }), vetResult: failedVet },
+      ],
+      {
+        seen,
+        health,
+        onFail: "skip",
+        send: async (text) => {
+          if (text.includes("#2")) throw new Error("boom");
+          sent.push(1);
+        },
+        alert: async () => true,
+      }
+    );
+    expect(sent).toHaveLength(1);
+    expect(seenIds().sort()).toEqual(["Expensify/App#1", "Expensify/App#3"]);
+  });
+
+  it("alerts once notification failures reach the threshold", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const { seen, health } = setup();
+    const alerts: string[] = [];
+    const issues = Array.from({ length: FAILURE_ALERT_THRESHOLD }, (_, i) => ({
+      issue: makeIssue({ number: i + 1 }),
+    }));
+    await deliverNotifications(issues, {
+      seen,
+      health,
+      onFail: "warn",
+      send: async () => {
+        throw new Error("Telegram API error: 401");
+      },
+      alert: async (text) => {
+        alerts.push(text);
+        return true;
+      },
+    });
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toContain("failed to send");
+    expect(alerts[0]).toContain("401");
+    expect(health.buildHeartbeatMessage()).toContain(
+      `last ${FAILURE_ALERT_THRESHOLD} send(s) failed`
     );
   });
 });
