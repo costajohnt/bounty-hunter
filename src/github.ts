@@ -23,7 +23,12 @@ export function parseIssueUrl(url: string): ParsedIssueUrl {
   return { owner: match[1], repo: match[2], number: parseInt(match[3], 10) };
 }
 
-export function buildSearchArgs(repo: string, labels: string[]): string[] {
+/**
+ * Args for one `gh search issues` call in a repo. GitHub search ANDs repeated
+ * `label:` qualifiers, so this takes at most one label; fetchRepoIssues runs
+ * one search per configured label to get OR semantics (same as github_search).
+ */
+export function buildSearchArgs(repo: string, label?: string): string[] {
   const args = [
     "search", "issues",
     "--repo", repo,
@@ -33,25 +38,37 @@ export function buildSearchArgs(repo: string, labels: string[]): string[] {
     "--limit", "20",
     "--json", "number,title,url,createdAt,labels,body,commentsCount,assignees",
   ];
-  for (const label of labels) {
+  if (label !== undefined) {
     args.push("--label", label);
   }
   return args;
 }
 
+interface RawRepoIssue {
+  number: number;
+  title: string;
+  url: string;
+  createdAt: string;
+  labels: Array<{ name: string }>;
+  assignees: Array<{ login: string }>;
+  body: string;
+  commentsCount: number;
+}
+
+/**
+ * Open issues in `repo` carrying ANY of `labels` (all open issues when the
+ * list is empty). One search per label, deduped by issue number, newest first.
+ */
 export function fetchRepoIssues(repo: string, labels: string[]): BountyIssue[] {
-  const args = buildSearchArgs(repo, labels);
-  const raw = execFileSync("gh", args, { encoding: "utf-8", timeout: 30000 });
-  const issues = JSON.parse(raw) as Array<{
-    number: number;
-    title: string;
-    url: string;
-    createdAt: string;
-    labels: Array<{ name: string }>;
-    assignees: Array<{ login: string }>;
-    body: string;
-    commentsCount: number;
-  }>;
+  const searches = labels.length > 0 ? labels.map((label) => buildSearchArgs(repo, label)) : [buildSearchArgs(repo)];
+  const byNumber = new Map<number, RawRepoIssue>();
+  for (const args of searches) {
+    const raw = execFileSync("gh", args, { encoding: "utf-8", timeout: 30000 });
+    for (const issue of JSON.parse(raw) as RawRepoIssue[]) {
+      if (!byNumber.has(issue.number)) byNumber.set(issue.number, issue);
+    }
+  }
+  const issues = [...byNumber.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return issues.map((issue) => {
     const bountyAmount = extractBountyAmount(issue.title + " " + issue.body);
